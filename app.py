@@ -79,7 +79,7 @@ ROUTE_COORDINATES = [
 
 @st.cache_data
 def generate_factory_sensor_data():
-    """Generate simulated IoT sensor data for factory machines (last 7 days)"""
+    """Generate simulated IoT sensor data for factory machines (last 7 days) with realistic patterns"""
     
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
@@ -87,16 +87,32 @@ def generate_factory_sensor_data():
     
     data = []
     
+    # Define machine-specific characteristics for more realistic demo data
+    machine_profiles = {
+        'Machine_1': {'efficiency': 0.95, 'age': 2, 'maintenance_due': False},  # New, efficient
+        'Machine_2': {'efficiency': 0.85, 'age': 5, 'maintenance_due': True},   # Older, needs maintenance
+        'Machine_3': {'efficiency': 0.90, 'age': 3, 'maintenance_due': False}, # Average
+        'Machine_4': {'efficiency': 0.75, 'age': 8, 'maintenance_due': True},  # Old, problematic
+        'Machine_5': {'efficiency': 0.92, 'age': 1, 'maintenance_due': False}  # Almost new
+    }
+    
     for machine in MACHINES:
         machine_uptime = 0
         daily_uptime_reset = start_time.date()
+        profile = machine_profiles[machine]
         
-        for timestamp in timestamps:
+        for i, timestamp in enumerate(timestamps):
             if timestamp.date() != daily_uptime_reset:
                 machine_uptime = 0
                 daily_uptime_reset = timestamp.date()
             
-            machine_uptime += 1/6
+            # Simulate downtime for maintenance or issues
+            is_running = True
+            if profile['maintenance_due'] and random.random() < 0.02:  # 2% chance of downtime
+                is_running = False
+            
+            if is_running:
+                machine_uptime += 1/6
             
             row = {
                 'Timestamp': timestamp,
@@ -105,16 +121,86 @@ def generate_factory_sensor_data():
             }
             
             for sensor, (min_val, max_val) in SENSOR_RANGES.items():
-                hour_factor = np.sin(2 * np.pi * timestamp.hour / 24) * 0.1
-                base_value = (min_val + max_val) / 2 + (max_val - min_val) * hour_factor
-                noise = np.random.normal(0, (max_val - min_val) * 0.05)
+                if not is_running:
+                    # Machine is down - minimal readings
+                    if sensor == 'Temperature':
+                        value = np.random.uniform(20, 25)  # Ambient temperature
+                    elif sensor == 'Power_Consumption':
+                        value = np.random.uniform(10, 30)  # Standby power
+                    elif sensor == 'Vibration':
+                        value = np.random.uniform(0, 1)    # No vibration
+                    else:
+                        value = min_val + (max_val - min_val) * 0.1
+                else:
+                    # Normal operation with realistic patterns
+                    
+                    # Daily cycle (higher activity during work hours)
+                    hour_factor = np.sin(2 * np.pi * timestamp.hour / 24) * 0.15
+                    if 6 <= timestamp.hour <= 22:  # Work hours
+                        hour_factor += 0.2
+                    
+                    # Weekly cycle (lower on weekends)
+                    if timestamp.weekday() >= 5:  # Weekend
+                        hour_factor -= 0.1
+                    
+                    # Machine efficiency impact
+                    efficiency_factor = (1 - profile['efficiency']) * 0.3
+                    
+                    # Age-related degradation
+                    age_factor = profile['age'] * 0.02
+                    
+                    base_value = (min_val + max_val) / 2 + (max_val - min_val) * hour_factor
+                    base_value += (max_val - min_val) * (efficiency_factor + age_factor)
+                    
+                    # Sensor-specific realistic patterns
+                    if sensor == 'Temperature':
+                        # Temperature correlates with power and activity
+                        base_value += np.random.normal(0, 3)
+                        if profile['maintenance_due']:
+                            base_value += np.random.uniform(2, 8)  # Overheating
+                    
+                    elif sensor == 'Vibration':
+                        # Old machines vibrate more
+                        base_value += profile['age'] * 0.5
+                        if profile['maintenance_due']:
+                            base_value += np.random.uniform(1, 4)  # High vibration
+                    
+                    elif sensor == 'Power_Consumption':
+                        # Inefficient machines consume more power
+                        base_value *= (2 - profile['efficiency'])
+                    
+                    elif sensor == 'Pressure':
+                        # Pressure variations for hydraulic systems
+                        base_value += np.sin(i * 0.1) * 0.5  # Cyclic pressure
+                    
+                    elif sensor == 'CO2_Levels':
+                        # Higher during work hours, ventilation effects
+                        if 8 <= timestamp.hour <= 17:
+                            base_value += np.random.uniform(200, 800)
+                    
+                    elif sensor == 'Noise_Levels':
+                        # Correlates with vibration and activity
+                        base_value += profile['age'] * 2
+                        if profile['maintenance_due']:
+                            base_value += np.random.uniform(5, 15)
+                    
+                    # Add realistic noise
+                    noise = np.random.normal(0, (max_val - min_val) * 0.04)
+                    
+                    # Critical anomalies (equipment failures)
+                    if random.random() < 0.01:  # 1% chance of critical anomaly
+                        if sensor in ['Temperature', 'Vibration', 'Noise_Levels']:
+                            anomaly = np.random.uniform(0.3, 0.7) * (max_val - min_val)
+                            noise += anomaly
+                    
+                    # Minor anomalies
+                    elif random.random() < 0.05:  # 5% chance of minor anomaly
+                        anomaly = np.random.normal(0, (max_val - min_val) * 0.15)
+                        noise += anomaly
+                    
+                    value = base_value + noise
+                    value = np.clip(value, min_val, max_val)
                 
-                if random.random() < 0.05:
-                    anomaly = np.random.normal(0, (max_val - min_val) * 0.2)
-                    noise += anomaly
-                
-                value = base_value + noise
-                value = np.clip(value, min_val, max_val)
                 row[sensor] = round(value, 2)
             
             data.append(row)
@@ -123,63 +209,158 @@ def generate_factory_sensor_data():
 
 @st.cache_data
 def generate_cold_chain_data():
-    """Generate cold chain monitoring data (last 7 days, every 20 minutes)"""
+    """Generate cold chain monitoring data with realistic shipping scenarios (last 7 days, every 20 minutes)"""
     
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
     timestamps = pd.date_range(start=start_time, end=end_time, freq='20T')
     
     data = []
-    shipment_ids = [f'SHIP_{i:04d}' for i in range(100, 131)]
     
-    for shipment_id in shipment_ids:
-        truck_id = random.choice(TRUCK_IDS)
+    # Define shipment types with different temperature requirements
+    shipment_types = {
+        'SHIP_0100': {'type': 'Frozen', 'target_temp': -18, 'tolerance': 3, 'cargo': 'Ice Cream'},
+        'SHIP_0101': {'type': 'Chilled', 'target_temp': 4, 'tolerance': 2, 'cargo': 'Dairy Products'},
+        'SHIP_0102': {'type': 'Pharmaceuticals', 'target_temp': 3, 'tolerance': 1, 'cargo': 'Vaccines'},
+        'SHIP_0103': {'type': 'Fresh Produce', 'target_temp': 7, 'tolerance': 3, 'cargo': 'Vegetables'},
+        'SHIP_0104': {'type': 'Frozen', 'target_temp': -15, 'tolerance': 4, 'cargo': 'Seafood'},
+        'SHIP_0105': {'type': 'Chilled', 'target_temp': 2, 'tolerance': 2, 'cargo': 'Fresh Meat'},
+        'SHIP_0106': {'type': 'Blood Products', 'target_temp': 5, 'tolerance': 1, 'cargo': 'Blood Bank'},
+        'SHIP_0107': {'type': 'Fresh Produce', 'target_temp': 8, 'tolerance': 2, 'cargo': 'Fruits'},
+        'SHIP_0108': {'type': 'Frozen', 'target_temp': -20, 'tolerance': 2, 'cargo': 'Medical Samples'},
+        'SHIP_0109': {'type': 'Chilled', 'target_temp': 6, 'tolerance': 3, 'cargo': 'Beverages'},
+    }
+    
+    # Route profiles with different challenges
+    route_profiles = {
+        'Route_A': {'distance': 500, 'duration_hours': 8, 'difficulty': 'Easy'},      # Short local route
+        'Route_B': {'distance': 1200, 'duration_hours': 18, 'difficulty': 'Medium'},  # Medium route
+        'Route_C': {'distance': 2500, 'duration_hours': 36, 'difficulty': 'Hard'},    # Long cross-country
+        'Route_D': {'distance': 800, 'duration_hours': 12, 'difficulty': 'Medium'},   # Mountain route
+        'Route_E': {'distance': 300, 'duration_hours': 5, 'difficulty': 'Easy'},      # City delivery
+    }
+    
+    routes = list(route_profiles.keys())
+    
+    for shipment_id, ship_config in shipment_types.items():
+        truck_id = f"TRUCK_{random.randint(1, 20):03d}"
+        route = random.choice(routes)
+        route_config = route_profiles[route]
+        
+        # Select random coordinates for this route
         route_coords = list(ROUTE_COORDINATES)
         random.shuffle(route_coords)
+        route_coords = route_coords[:4]  # Use 4 waypoints
+        
+        # Calculate route progress
+        total_duration = len(timestamps)
         
         for i, timestamp in enumerate(timestamps):
-            # Simulate truck moving along route
-            coord_index = min(i // 20, len(route_coords) - 1)
-            lat, lon = route_coords[coord_index]
+            # Calculate route progress (0 to 1)
+            progress = min(i / (total_duration * 0.8), 1.0)  # 80% of time for delivery
             
-            # Add small random variations to coordinates
-            lat += np.random.normal(0, 0.01)
-            lon += np.random.normal(0, 0.01)
+            # Interpolate GPS coordinates along route
+            if progress < 1.0:
+                coord_progress = progress * (len(route_coords) - 1)
+                coord_index = int(coord_progress)
+                coord_fraction = coord_progress - coord_index
+                
+                if coord_index < len(route_coords) - 1:
+                    lat1, lon1 = route_coords[coord_index]
+                    lat2, lon2 = route_coords[coord_index + 1]
+                    lat = lat1 + (lat2 - lat1) * coord_fraction
+                    lon = lon1 + (lon2 - lon1) * coord_fraction
+                else:
+                    lat, lon = route_coords[-1]
+            else:
+                # Delivered - at final destination
+                lat, lon = route_coords[-1]
             
-            # Temperature should be around 2-8°C for cold chain
-            base_temp = 4.0
-            temp_variation = np.random.normal(0, 1.5)
+            # Add GPS noise
+            lat += np.random.normal(0, 0.005)
+            lon += np.random.normal(0, 0.005)
             
-            # Occasionally simulate temperature excursions (5% chance)
-            if random.random() < 0.05:
-                temp_variation += np.random.uniform(5, 15)
+            # Temperature simulation based on shipment type
+            target_temp = ship_config['target_temp']
+            tolerance = ship_config['tolerance']
             
-            cold_storage_temp = base_temp + temp_variation
+            # Base temperature with small variations
+            temp_variation = np.random.normal(0, tolerance * 0.3)
             
-            # Humidity around 60-75%
-            humidity = np.random.uniform(55, 80)
+            # Environmental factors
+            hour = timestamp.hour
             
-            # Door status (mostly closed, occasionally open for 1-2 readings)
+            # Day/night temperature variations (external influence)
+            if 12 <= hour <= 16:  # Hot afternoon
+                external_influence = np.random.uniform(0.5, 2.0)
+            elif 2 <= hour <= 6:   # Cold night
+                external_influence = np.random.uniform(-1.0, -0.3)
+            else:
+                external_influence = np.random.uniform(-0.5, 0.5)
+            
+            # Route difficulty impact
+            if route_config['difficulty'] == 'Hard':
+                temp_variation += np.random.uniform(-1, 1.5)  # More temperature fluctuation
+            elif route_config['difficulty'] == 'Medium':
+                temp_variation += np.random.uniform(-0.5, 1.0)
+            
+            # Equipment issues (some trucks have problems)
+            if truck_id in ['TRUCK_007', 'TRUCK_015', 'TRUCK_018']:  # Problem trucks
+                if random.random() < 0.08:  # 8% chance of temperature excursion
+                    temp_variation += np.random.uniform(3, 12)
+            elif random.random() < 0.02:  # 2% chance for normal trucks
+                temp_variation += np.random.uniform(2, 8)
+            
+            cold_storage_temp = target_temp + temp_variation + external_influence * 0.3
+            
+            # Humidity simulation (inversely related to temperature for cold storage)
+            base_humidity = 65
+            humidity_variation = np.random.normal(0, 5)
+            
+            # Colder temperatures generally have lower humidity in the data
+            if cold_storage_temp < 0:
+                humidity = base_humidity - 10 + humidity_variation
+            else:
+                humidity = base_humidity + humidity_variation
+            
+            humidity = np.clip(humidity, 30, 95)
+            
+            # Door status simulation (realistic opening patterns)
             door_status = 'closed'
-            if random.random() < 0.02:
+            
+            # More likely to open during loading/unloading times
+            if progress < 0.05 or progress > 0.95:  # Start or end of journey
+                if random.random() < 0.05:  # 5% chance during loading/unloading
+                    door_status = 'open'
+            elif random.random() < 0.008:  # 0.8% chance during transit
                 door_status = 'open'
+            
+            # Temperature spikes when door opens
+            if door_status == 'open':
+                if target_temp < 0:  # Frozen goods
+                    cold_storage_temp += np.random.uniform(5, 15)
+                else:  # Chilled goods
+                    cold_storage_temp += np.random.uniform(2, 8)
             
             data.append({
                 'timestamp': timestamp,
                 'shipment_id': shipment_id,
                 'truck_id': truck_id,
+                'cargo_type': ship_config['cargo'],
+                'route': route,
                 'cold_storage_temp': round(cold_storage_temp, 1),
                 'humidity': round(humidity, 1),
                 'latitude': round(lat, 4),
                 'longitude': round(lon, 4),
-                'door_status': door_status
+                'door_status': door_status,
+                'route_progress': round(progress * 100, 1)
             })
     
     return pd.DataFrame(data)
 
 @st.cache_data
 def generate_warehouse_environmental_data():
-    """Generate warehouse environmental monitoring data"""
+    """Generate warehouse environmental monitoring data with realistic operational patterns"""
     
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
@@ -187,41 +368,194 @@ def generate_warehouse_environmental_data():
     
     data = []
     
+    # Define warehouse characteristics for realistic demo data
+    warehouse_profiles = {
+        'WH_North': {
+            'type': 'Pharmaceutical Storage',
+            'size': 'Large',
+            'ventilation': 'Advanced',
+            'occupancy_peak': 150,
+            'hvac_efficiency': 0.95,
+            'issues': []
+        },
+        'WH_South': {
+            'type': 'Food Distribution',
+            'size': 'Medium', 
+            'ventilation': 'Standard',
+            'occupancy_peak': 80,
+            'hvac_efficiency': 0.85,
+            'issues': ['Old HVAC System']
+        },
+        'WH_East': {
+            'type': 'Electronics Storage',
+            'size': 'Small',
+            'ventilation': 'Advanced',
+            'occupancy_peak': 40,
+            'hvac_efficiency': 0.90,
+            'issues': []
+        },
+        'WH_West': {
+            'type': 'Chemical Storage',
+            'size': 'Large',
+            'ventilation': 'Industrial',
+            'occupancy_peak': 100,
+            'hvac_efficiency': 0.88,
+            'issues': ['Ventilation Maintenance Due']
+        },
+        'WH_Central': {
+            'type': 'General Storage',
+            'size': 'Medium',
+            'ventilation': 'Standard',
+            'occupancy_peak': 120,
+            'hvac_efficiency': 0.75,
+            'issues': ['CO2 Sensor Calibration', 'HVAC Filter Replacement']
+        }
+    }
+    
     for warehouse_id in WAREHOUSES:
+        profile = warehouse_profiles[warehouse_id]
+        
         for timestamp in timestamps:
-            # CO2 levels (normal: 400-1000 ppm, alerts > 1500)
-            base_co2 = 600
-            co2_variation = np.random.normal(0, 150)
+            hour = timestamp.hour
+            day_of_week = timestamp.weekday()
             
-            # Business hours effect (higher CO2 during work hours)
-            if 8 <= timestamp.hour <= 18:
-                co2_variation += np.random.uniform(100, 400)
+            # Simulate occupancy patterns (affects CO2 and temperature)
+            if day_of_week < 5:  # Weekday
+                if 7 <= hour <= 18:  # Work hours
+                    occupancy_factor = 0.6 + 0.4 * np.sin(np.pi * (hour - 7) / 11)
+                elif 19 <= hour <= 22:  # Evening shift
+                    occupancy_factor = 0.3
+                else:  # Night
+                    occupancy_factor = 0.05
+            else:  # Weekend
+                occupancy_factor = 0.1 if 9 <= hour <= 15 else 0.02
             
-            # Occasional spikes (3% chance)
-            if random.random() < 0.03:
-                co2_variation += np.random.uniform(800, 1200)
+            current_occupancy = int(profile['occupancy_peak'] * occupancy_factor)
             
-            co2_level = max(400, base_co2 + co2_variation)
+            # CO2 Level Simulation
+            base_co2 = 420  # Outdoor baseline
             
-            # Warehouse temperature (should be controlled)
-            temp_warehouse = np.random.normal(22, 2)
+            # Occupancy impact (people generate CO2)
+            occupancy_co2 = current_occupancy * np.random.uniform(8, 15)
             
-            # Humidity
-            humidity = np.random.normal(45, 8)
+            # Ventilation efficiency impact
+            ventilation_efficiency = {
+                'Advanced': 0.9, 'Industrial': 0.85, 'Standard': 0.7
+            }[profile['ventilation']]
             
-            # Air Quality Index (0-500 scale, >100 is unhealthy)
-            base_aqi = 35
-            aqi_variation = np.random.normal(0, 20)
+            co2_buildup = occupancy_co2 * (1 - ventilation_efficiency)
             
-            # Correlate with CO2 levels
-            if co2_level > 1200:
-                aqi_variation += np.random.uniform(30, 80)
+            # HVAC efficiency impact
+            hvac_factor = 1 - profile['hvac_efficiency']
+            co2_buildup *= (1 + hvac_factor)
             
-            air_quality_index = max(0, base_aqi + aqi_variation)
+            # Warehouse-specific issues
+            if 'CO2 Sensor Calibration' in profile['issues']:
+                co2_buildup *= np.random.uniform(1.2, 1.5)  # Higher readings due to calibration
+            
+            if 'Ventilation Maintenance Due' in profile['issues']:
+                co2_buildup *= np.random.uniform(1.3, 1.8)  # Poor ventilation performance
+            
+            # Environmental variations
+            co2_variation = np.random.normal(0, 50)
+            
+            # Special events (deliveries, equipment operation)
+            if random.random() < 0.15:  # 15% chance of special activity
+                co2_variation += np.random.uniform(100, 300)
+            
+            # Critical CO2 events (ventilation failure)
+            if random.random() < 0.008:  # 0.8% chance of critical event
+                co2_variation += np.random.uniform(800, 1500)
+            
+            co2_level = base_co2 + co2_buildup + co2_variation
+            co2_level = max(400, co2_level)  # Minimum outdoor level
+            
+            # Temperature Simulation
+            base_temp_target = {
+                'Pharmaceutical Storage': 20, 'Food Distribution': 18,
+                'Electronics Storage': 22, 'Chemical Storage': 19,
+                'General Storage': 21
+            }[profile['type']]
+            
+            # External temperature influence (day/night cycle)
+            external_temp_factor = 2 * np.sin(2 * np.pi * (hour - 6) / 24)
+            
+            # Occupancy heat generation
+            occupancy_heat = current_occupancy * 0.1
+            
+            # HVAC effectiveness
+            hvac_control = profile['hvac_efficiency']
+            temp_variation = np.random.normal(0, 2 * (1 - hvac_control))
+            
+            # System issues
+            if 'Old HVAC System' in profile['issues']:
+                temp_variation += np.random.uniform(-1, 3)  # Less stable temperature
+            
+            temp_warehouse = (base_temp_target + 
+                            external_temp_factor * (1 - hvac_control) + 
+                            occupancy_heat * (1 - hvac_control) + 
+                            temp_variation)
+            
+            # Humidity Simulation
+            base_humidity = 45
+            
+            # Seasonal variations
+            if timestamp.month in [6, 7, 8]:  # Summer
+                humidity_base_adj = 5
+            elif timestamp.month in [12, 1, 2]:  # Winter
+                humidity_base_adj = -5
+            else:
+                humidity_base_adj = 0
+            
+            # Occupancy impact on humidity
+            humidity_occupancy = current_occupancy * 0.15
+            
+            # Ventilation impact
+            humidity_control = ventilation_efficiency * 0.8
+            humidity_variation = np.random.normal(0, 8 * (1 - humidity_control))
+            
+            humidity = (base_humidity + humidity_base_adj + 
+                       humidity_occupancy * (1 - humidity_control) + 
+                       humidity_variation)
+            humidity = np.clip(humidity, 20, 90)
+            
+            # Air Quality Index Simulation
+            base_aqi = 25  # Good air quality baseline
+            
+            # CO2 correlation
+            if co2_level > 1000:
+                aqi_co2_impact = (co2_level - 1000) * 0.05
+            else:
+                aqi_co2_impact = 0
+            
+            # Occupancy and activity impact
+            aqi_activity = current_occupancy * 0.3
+            
+            # Warehouse type impact
+            type_aqi_impact = {
+                'Chemical Storage': 15, 'Food Distribution': 5,
+                'Pharmaceutical Storage': 2, 'Electronics Storage': 3,
+                'General Storage': 8
+            }[profile['type']]
+            
+            # Equipment and ventilation impact
+            aqi_equipment = np.random.uniform(0, 20) * (1 - ventilation_efficiency)
+            
+            # Special events (chemical spills, dust, etc.)
+            if random.random() < 0.02:  # 2% chance of air quality event
+                aqi_equipment += np.random.uniform(30, 80)
+            
+            aqi_variation = np.random.normal(0, 15)
+            
+            air_quality_index = (base_aqi + aqi_co2_impact + aqi_activity + 
+                               type_aqi_impact + aqi_equipment + aqi_variation)
+            air_quality_index = max(0, air_quality_index)
             
             data.append({
                 'timestamp': timestamp,
                 'warehouse_id': warehouse_id,
+                'warehouse_type': profile['type'],
+                'current_occupancy': current_occupancy,
                 'co2_level_ppm': round(co2_level, 0),
                 'temp_warehouse': round(temp_warehouse, 1),
                 'humidity': round(humidity, 1),
@@ -232,7 +566,7 @@ def generate_warehouse_environmental_data():
 
 @st.cache_data
 def generate_inventory_data():
-    """Generate inventory monitoring data"""
+    """Generate inventory monitoring data with realistic product categories and stock patterns"""
     
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7) 
@@ -240,83 +574,340 @@ def generate_inventory_data():
     
     data = []
     
-    for sku_id in SKU_LIST:
+    # Define product categories with realistic inventory patterns
+    product_categories = {
+        'SKU_1001': {'category': 'Electronics', 'product': 'Smartphones', 'velocity': 'High', 'seasonality': 'Low'},
+        'SKU_1002': {'category': 'Electronics', 'product': 'Laptops', 'velocity': 'Medium', 'seasonality': 'Medium'},
+        'SKU_1003': {'category': 'Clothing', 'product': 'Winter Jackets', 'velocity': 'Medium', 'seasonality': 'High'},
+        'SKU_1004': {'category': 'Food', 'product': 'Canned Goods', 'velocity': 'High', 'seasonality': 'Low'},
+        'SKU_1005': {'category': 'Automotive', 'product': 'Brake Pads', 'velocity': 'Low', 'seasonality': 'Low'},
+        'SKU_1006': {'category': 'Healthcare', 'product': 'Surgical Masks', 'velocity': 'High', 'seasonality': 'Medium'},
+        'SKU_1007': {'category': 'Home & Garden', 'product': 'Garden Tools', 'velocity': 'Medium', 'seasonality': 'High'},
+        'SKU_1008': {'category': 'Books', 'product': 'Technical Manuals', 'velocity': 'Low', 'seasonality': 'Low'},
+        'SKU_1009': {'category': 'Sports', 'product': 'Fitness Equipment', 'velocity': 'Medium', 'seasonality': 'Medium'},
+        'SKU_1010': {'category': 'Toys', 'product': 'Educational Toys', 'velocity': 'High', 'seasonality': 'High'},
+        
+        'SKU_1011': {'category': 'Electronics', 'product': 'Tablets', 'velocity': 'Medium', 'seasonality': 'Low'},
+        'SKU_1012': {'category': 'Clothing', 'product': 'Summer Apparel', 'velocity': 'High', 'seasonality': 'High'},
+        'SKU_1013': {'category': 'Food', 'product': 'Frozen Foods', 'velocity': 'High', 'seasonality': 'Low'},
+        'SKU_1014': {'category': 'Automotive', 'product': 'Oil Filters', 'velocity': 'Medium', 'seasonality': 'Low'},
+        'SKU_1015': {'category': 'Healthcare', 'product': 'First Aid Kits', 'velocity': 'Low', 'seasonality': 'Low'},
+        'SKU_1016': {'category': 'Home & Garden', 'product': 'Power Tools', 'velocity': 'Medium', 'seasonality': 'Medium'},
+        'SKU_1017': {'category': 'Books', 'product': 'Novels', 'velocity': 'Low', 'seasonality': 'Low'},
+        'SKU_1018': {'category': 'Sports', 'product': 'Running Shoes', 'velocity': 'High', 'seasonality': 'Medium'},
+        'SKU_1019': {'category': 'Beauty', 'product': 'Skincare Products', 'velocity': 'Medium', 'seasonality': 'Low'},
+        'SKU_1020': {'category': 'Office', 'product': 'Printer Paper', 'velocity': 'High', 'seasonality': 'Low'},
+        
+        'SKU_1021': {'category': 'Electronics', 'product': 'Headphones', 'velocity': 'High', 'seasonality': 'Medium'},
+        'SKU_1022': {'category': 'Clothing', 'product': 'Work Uniforms', 'velocity': 'Medium', 'seasonality': 'Low'},
+        'SKU_1023': {'category': 'Food', 'product': 'Snack Foods', 'velocity': 'High', 'seasonality': 'Low'},
+        'SKU_1024': {'category': 'Automotive', 'product': 'Tire Gauges', 'velocity': 'Low', 'seasonality': 'Low'},
+        'SKU_1025': {'category': 'Healthcare', 'product': 'Thermometers', 'velocity': 'Medium', 'seasonality': 'Medium'},
+        'SKU_1026': {'category': 'Home & Garden', 'product': 'Light Bulbs', 'velocity': 'Medium', 'seasonality': 'Low'},
+        'SKU_1027': {'category': 'Books', 'product': 'Children Books', 'velocity': 'Medium', 'seasonality': 'Medium'},
+        'SKU_1028': {'category': 'Sports', 'product': 'Yoga Mats', 'velocity': 'Medium', 'seasonality': 'Medium'},
+        'SKU_1029': {'category': 'Beauty', 'product': 'Hair Products', 'velocity': 'Medium', 'seasonality': 'Low'},
+        'SKU_1030': {'category': 'Office', 'product': 'Staplers', 'velocity': 'Low', 'seasonality': 'Low'},
+    }
+    
+    for sku_id, product_info in product_categories.items():
         warehouse_id = random.choice(WAREHOUSES)
         
-        # Set initial stock level and reorder threshold
-        initial_stock = np.random.randint(50, 500)
-        reorder_threshold = np.random.randint(20, 80)
+        # Set inventory parameters based on product characteristics
+        velocity_multipliers = {'High': 3.0, 'Medium': 1.5, 'Low': 0.5}
+        velocity = velocity_multipliers[product_info['velocity']]
+        
+        # Initial stock levels based on velocity
+        if product_info['velocity'] == 'High':
+            initial_stock = np.random.randint(200, 800)
+            reorder_threshold = np.random.randint(50, 150)
+        elif product_info['velocity'] == 'Medium':
+            initial_stock = np.random.randint(100, 400)
+            reorder_threshold = np.random.randint(25, 80)
+        else:  # Low velocity
+            initial_stock = np.random.randint(50, 200)
+            reorder_threshold = np.random.randint(10, 40)
         
         current_stock = initial_stock
+        days_since_restock = 0
         
         for timestamp in timestamps:
-            # Simulate stock consumption (random decreases)
-            if random.random() < 0.3:  # 30% chance of stock movement
-                consumption = np.random.randint(1, 15)
+            hour = timestamp.hour
+            day_of_week = timestamp.weekday()
+            
+            # Consumption patterns based on time and product type
+            consumption_probability = 0.2  # Base 20% chance
+            
+            # Business hours increase consumption
+            if 8 <= hour <= 18 and day_of_week < 5:  # Business hours, weekdays
+                consumption_probability *= 1.5
+            elif day_of_week >= 5:  # Weekends
+                if product_info['category'] in ['Food', 'Electronics', 'Clothing']:
+                    consumption_probability *= 1.2  # Consumer goods move more on weekends
+                else:
+                    consumption_probability *= 0.6  # B2B products move less
+            
+            # Seasonal effects
+            month = timestamp.month
+            if product_info['seasonality'] == 'High':
+                if product_info['product'] in ['Winter Jackets'] and month in [10, 11, 12, 1, 2]:
+                    consumption_probability *= 2.0
+                elif product_info['product'] in ['Summer Apparel', 'Garden Tools'] and month in [4, 5, 6, 7, 8]:
+                    consumption_probability *= 2.0
+                elif product_info['product'] in ['Educational Toys'] and month in [11, 12]:  # Holiday season
+                    consumption_probability *= 1.8
+            
+            # Apply velocity factor
+            consumption_probability *= velocity
+            
+            # Simulate stock consumption
+            if random.random() < consumption_probability:
+                if product_info['velocity'] == 'High':
+                    consumption = np.random.randint(5, 25)
+                elif product_info['velocity'] == 'Medium':
+                    consumption = np.random.randint(2, 12)
+                else:  # Low velocity
+                    consumption = np.random.randint(1, 5)
+                
                 current_stock = max(0, current_stock - consumption)
             
-            # Simulate restocking
+            # Restocking logic
             restock_scheduled = False
             if current_stock <= reorder_threshold:
                 restock_scheduled = True
-                # Sometimes stock gets replenished
-                if random.random() < 0.1:  # 10% chance of restocking
-                    current_stock += np.random.randint(100, 300)
+                days_since_restock += 0.5/24  # 30 minutes
+                
+                # Restocking happens after some delay (1-3 days typically)
+                restock_delay_threshold = np.random.uniform(1, 4)  # days
+                
+                if days_since_restock >= restock_delay_threshold:
+                    # Calculate restock quantity
+                    if product_info['velocity'] == 'High':
+                        restock_quantity = np.random.randint(300, 1000)
+                    elif product_info['velocity'] == 'Medium':
+                        restock_quantity = np.random.randint(150, 500)
+                    else:  # Low velocity
+                        restock_quantity = np.random.randint(75, 250)
+                    
+                    current_stock += restock_quantity
                     restock_scheduled = False
+                    days_since_restock = 0
+            else:
+                days_since_restock = 0
+            
+            # Emergency stock situations (supplier delays, quality issues)
+            if random.random() < 0.001:  # 0.1% chance of supply chain disruption
+                current_stock = max(0, int(current_stock * np.random.uniform(0.1, 0.5)))
+            
+            # Stock adjustments (inventory corrections, damaged goods)
+            if random.random() < 0.005:  # 0.5% chance of stock adjustment
+                adjustment = np.random.randint(-10, 5)  # Usually losses
+                current_stock = max(0, current_stock + adjustment)
             
             data.append({
                 'timestamp': timestamp,
                 'sku_id': sku_id,
+                'product_name': product_info['product'],
+                'category': product_info['category'],
                 'warehouse_id': warehouse_id,
                 'stock_level': current_stock,
                 'reorder_threshold': reorder_threshold,
-                'restock_scheduled': restock_scheduled
+                'restock_scheduled': restock_scheduled,
+                'velocity': product_info['velocity'],
+                'days_since_restock': round(days_since_restock, 2)
             })
     
     return pd.DataFrame(data)
 
 @st.cache_data
 def generate_package_tampering_data():
-    """Generate package tampering detection data"""
+    """Generate package tampering detection data with realistic shipping scenarios and security events"""
     
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
     timestamps = pd.date_range(start=start_time, end=end_time, freq='25T')
     
     data = []
-    package_ids = [f'PKG_{i:06d}' for i in range(100000, 100201)]
     
-    for package_id in package_ids:
-        for timestamp in timestamps:
-            # Tilt angle (normal: 0-10°, alert > 45°)
-            base_tilt = np.random.uniform(0, 5)
+    # Define package types with different security requirements
+    package_types = {
+        'PKG_100001': {'type': 'Electronics', 'value': 'High', 'fragile': True, 'security': 'Standard'},
+        'PKG_100002': {'type': 'Pharmaceuticals', 'value': 'High', 'fragile': False, 'security': 'High'},
+        'PKG_100003': {'type': 'Jewelry', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
+        'PKG_100004': {'type': 'Documents', 'value': 'Medium', 'fragile': False, 'security': 'High'},
+        'PKG_100005': {'type': 'Artwork', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
+        'PKG_100006': {'type': 'Books', 'value': 'Low', 'fragile': False, 'security': 'Standard'},
+        'PKG_100007': {'type': 'Medical Devices', 'value': 'High', 'fragile': True, 'security': 'High'},
+        'PKG_100008': {'type': 'Clothing', 'value': 'Medium', 'fragile': False, 'security': 'Standard'},
+        'PKG_100009': {'type': 'Chemicals', 'value': 'Medium', 'fragile': False, 'security': 'High'},
+        'PKG_100010': {'type': 'Computer Parts', 'value': 'High', 'fragile': True, 'security': 'High'},
+        
+        'PKG_100011': {'type': 'Watches', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
+        'PKG_100012': {'type': 'Cosmetics', 'value': 'Medium', 'fragile': False, 'security': 'Standard'},
+        'PKG_100013': {'type': 'Rare Coins', 'value': 'Very High', 'fragile': False, 'security': 'Maximum'},
+        'PKG_100014': {'type': 'Legal Documents', 'value': 'High', 'fragile': False, 'security': 'High'},
+        'PKG_100015': {'type': 'Prototypes', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
+        'PKG_100016': {'type': 'Textbooks', 'value': 'Low', 'fragile': False, 'security': 'Standard'},
+        'PKG_100017': {'type': 'Laboratory Equipment', 'value': 'High', 'fragile': True, 'security': 'High'},
+        'PKG_100018': {'type': 'Samples', 'value': 'Medium', 'fragile': True, 'security': 'High'},
+        'PKG_100019': {'type': 'Optical Equipment', 'value': 'High', 'fragile': True, 'security': 'High'},
+        'PKG_100020': {'type': 'Data Storage', 'value': 'High', 'fragile': False, 'security': 'Maximum'},
+    }
+    
+    # Shipping phase tracking
+    shipping_phases = ['Pickup', 'Transit', 'Hub_Processing', 'Last_Mile', 'Delivered']
+    
+    for package_id, package_info in package_types.items():
+        # Determine shipping duration and phases
+        total_shipping_time = len(timestamps)
+        phase_durations = {
+            'Pickup': int(total_shipping_time * 0.05),      # 5% - pickup phase
+            'Transit': int(total_shipping_time * 0.60),     # 60% - main transit
+            'Hub_Processing': int(total_shipping_time * 0.15), # 15% - hub processing
+            'Last_Mile': int(total_shipping_time * 0.15),   # 15% - last mile delivery
+            'Delivered': int(total_shipping_time * 0.05)    # 5% - delivered
+        }
+        
+        current_phase = 'Pickup'
+        phase_progress = 0
+        
+        for i, timestamp in enumerate(timestamps):
+            # Determine current shipping phase
+            total_progress = 0
+            for phase, duration in phase_durations.items():
+                if i < total_progress + duration:
+                    current_phase = phase
+                    phase_progress = i - total_progress
+                    break
+                total_progress += duration
             
-            # Occasional high tilt events (2% chance)
-            if random.random() < 0.02:
-                base_tilt += np.random.uniform(40, 80)
+            # Base tilt angle (normal handling)
+            base_tilt = np.random.uniform(0, 8)
+            
+            # Phase-specific tilt patterns
+            if current_phase == 'Pickup':
+                # More movement during pickup
+                base_tilt += np.random.uniform(0, 5)
+            elif current_phase == 'Transit':
+                # Generally stable during transit
+                base_tilt += np.random.uniform(0, 3)
+                # Occasional road bumps
+                if random.random() < 0.05:
+                    base_tilt += np.random.uniform(5, 15)
+            elif current_phase == 'Hub_Processing':
+                # More handling at hubs
+                base_tilt += np.random.uniform(0, 8)
+                # Sorting equipment can cause tilting
+                if random.random() < 0.08:
+                    base_tilt += np.random.uniform(10, 25)
+            elif current_phase == 'Last_Mile':
+                # Local delivery variations
+                base_tilt += np.random.uniform(0, 6)
+            
+            # Package-specific tilt sensitivity
+            if package_info['fragile']:
+                # Fragile packages are handled more carefully usually
+                base_tilt *= 0.8
+                # But occasionally get mishandled
+                if random.random() < 0.02:
+                    base_tilt += np.random.uniform(20, 50)
+            
+            # Security level impact (higher security = more careful handling)
+            security_multipliers = {'Standard': 1.0, 'High': 0.8, 'Maximum': 0.6}
+            base_tilt *= security_multipliers[package_info['security']]
+            
+            # Critical tilt events (drops, mishandling)
+            if random.random() < 0.008:  # 0.8% chance of critical tilt event
+                base_tilt += np.random.uniform(45, 90)
             
             tilt_angle = base_tilt
             
-            # Light exposure (normal: 0-100 lux, alert > 1000)
-            base_light = np.random.uniform(0, 50)
+            # Light exposure simulation
+            base_light = np.random.uniform(0, 80)  # Normal warehouse/truck lighting
             
-            # Occasional high light exposure (tampering attempts)
-            if random.random() < 0.015:
-                base_light += np.random.uniform(500, 2000)
+            # Phase-specific light exposure
+            if current_phase == 'Pickup':
+                base_light += np.random.uniform(50, 200)  # Loading dock lighting
+            elif current_phase == 'Hub_Processing':
+                base_light += np.random.uniform(100, 300)  # Bright sorting facilities
+            elif current_phase == 'Last_Mile':
+                # Outdoor delivery lighting
+                hour = timestamp.hour
+                if 6 <= hour <= 18:  # Daylight
+                    base_light += np.random.uniform(200, 800)
+                else:  # Night delivery
+                    base_light += np.random.uniform(50, 150)
+            
+            # Unauthorized access attempts (tampering)
+            tampering_risk = {'Standard': 0.01, 'High': 0.005, 'Maximum': 0.002}[package_info['security']]
+            
+            if random.random() < tampering_risk:
+                # Tampering attempt detected
+                base_light += np.random.uniform(800, 2500)  # Flashlights, bright lights
+                base_tilt += np.random.uniform(20, 60)      # Forceful handling
+            
+            # High-value packages attract more attention
+            if package_info['value'] == 'Very High' and random.random() < 0.003:
+                base_light += np.random.uniform(500, 1500)
+                base_tilt += np.random.uniform(15, 45)
             
             light_exposure = base_light
             
-            # Seal status (mostly intact, occasionally broken)
+            # Seal status simulation
             seal_status = 'intact'
-            if random.random() < 0.005:  # 0.5% chance of broken seal
+            
+            # Seal failure rate based on package handling and security
+            base_seal_failure_rate = 0.001  # 0.1% base rate
+            
+            # Higher tilt increases seal failure risk
+            if tilt_angle > 30:
+                base_seal_failure_rate *= 2
+            if tilt_angle > 45:
+                base_seal_failure_rate *= 3
+            
+            # High light exposure suggests tampering attempts
+            if light_exposure > 1000:
+                base_seal_failure_rate *= 5
+            
+            # Security level affects seal quality
+            security_seal_quality = {'Standard': 1.0, 'High': 0.5, 'Maximum': 0.2}
+            base_seal_failure_rate *= security_seal_quality[package_info['security']]
+            
+            # Transportation phase affects seal integrity
+            if current_phase == 'Hub_Processing':
+                base_seal_failure_rate *= 1.5  # More handling
+            
+            if random.random() < base_seal_failure_rate:
                 seal_status = 'broken'
+            
+            # Once broken, seal stays broken
+            if i > 0:
+                prev_data = [d for d in data if d['package_id'] == package_id]
+                if prev_data and prev_data[-1]['seal_status'] == 'broken':
+                    seal_status = 'broken'
+            
+            # Environmental factors
+            temperature_effect = np.random.uniform(-5, 5)  # Temperature affects sensors
+            humidity_effect = np.random.uniform(-2, 2)     # Humidity affects sensors
+            
+            tilt_angle += temperature_effect * 0.1
+            light_exposure += humidity_effect * 2
+            
+            # Ensure realistic bounds
+            tilt_angle = max(0, tilt_angle)
+            light_exposure = max(0, light_exposure)
             
             data.append({
                 'timestamp': timestamp,
                 'package_id': package_id,
+                'package_type': package_info['type'],
+                'package_value': package_info['value'],
+                'security_level': package_info['security'],
+                'shipping_phase': current_phase,
                 'tilt_angle': round(tilt_angle, 1),
                 'light_exposure': round(light_exposure, 0),
-                'seal_status': seal_status
+                'seal_status': seal_status,
+                'is_fragile': package_info['fragile']
             })
     
     return pd.DataFrame(data)
@@ -464,6 +1055,43 @@ def main():
     # Title and header
     st.title("🏭 Comprehensive IoT & Supply Chain Monitoring System")
     st.markdown("Real-time monitoring dashboard for factory operations and supply chain logistics")
+    
+    # Demo data notice
+    with st.expander("📊 About Demo Data", expanded=False):
+        st.markdown("""
+        **Enhanced Realistic Demo Data Features:**
+        
+        🏭 **Factory IoT System:**
+        - 5 machines with unique profiles (age, efficiency, maintenance status)
+        - Realistic sensor patterns with daily/weekly cycles
+        - Equipment failures and maintenance downtime simulation
+        - Temperature correlations with power consumption and age
+        
+        🚛 **Cold Chain Monitoring:**
+        - 10 different shipment types (frozen, chilled, pharmaceuticals)
+        - Realistic temperature requirements (-20°C to +8°C)
+        - Route-based GPS tracking with waypoints
+        - Temperature excursions during door openings
+        - Equipment failure simulation for specific trucks
+        
+        🧯 **Warehouse Environmental:**
+        - 5 warehouses with different characteristics and HVAC systems
+        - Occupancy-based CO2 and temperature patterns
+        - Ventilation efficiency and maintenance issues
+        - Business hours and seasonal variations
+        
+        📦 **Inventory Management:**
+        - 30 products across 10 categories with realistic stock velocities
+        - Seasonal demand patterns (winter jackets, garden tools)
+        - Supply chain disruptions and stock adjustments
+        - Velocity-based consumption patterns (high/medium/low)
+        
+        📦 **Package Tampering:**
+        - 20 packages with different security levels and values
+        - Shipping phase tracking (pickup → transit → hub → delivery)
+        - Fragile item handling with lower tilt tolerance
+        - Security-based seal failure rates and tampering attempts
+        """)
     
     # Load all data
     factory_data = generate_factory_sensor_data()
