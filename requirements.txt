@@ -1,0 +1,19 @@
+# Core Streamlit Framework
+streamlit>=1.28.0
+
+# Data Processing and Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization Libraries
+plotly>=5.15.0
+
+# Optional: Enhanced mapping capabilities (if you want to use Folium instead of Plotly maps)
+# folium>=0.14.0
+
+# Optional: Additional visualization library (if you want to extend charts)
+# altair>=5.0.0
+
+# Optional: For more advanced data analysis
+# scipy>=1.10.0
+# scikit-learn>=1.3.0
