@@ -4,73 +4,44 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import random
 import time
 from datetime import datetime, timedelta
-import random
-import uuid
 
-# Set page config
+# Set page configuration
 st.set_page_config(
-    page_title="IoT Factory & Supply Chain Monitoring",
+    page_title="IIoT & Supply Chain Dashboard",
     page_icon="🏭",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # =============================================================================
-# FACTORY IOT SENSOR PARAMETERS (Original System)
+# CONFIGURATION AND CONSTANTS
 # =============================================================================
-SENSOR_RANGES = {
-    'Temperature': (20, 80),
-    'Vibration': (0, 15),
-    'Humidity': (30, 90),
-    'Power_Consumption': (100, 300),
-    'Pressure': (1, 10),
-    'CO2_Levels': (400, 3000),
-    'Noise_Levels': (40, 100)
-}
 
-SENSOR_UNITS = {
-    'Temperature': '°C',
-    'Vibration': 'mm/s',
-    'Humidity': '%',
-    'Power_Consumption': 'kWh',
-    'Pressure': 'bar',
-    'CO2_Levels': 'ppm',
-    'Noise_Levels': 'dB'
-}
+# Machine and facility configurations
+MACHINES = [f'Machine_{i:02d}' for i in range(1, 11)]
+PRODUCTION_LINES = [f'Line_{chr(65+i)}' for i in range(5)]  # Line_A to Line_E
+FACTORY_ZONES = [f'Zone_{i}' for i in range(1, 8)]
+WAREHOUSES = [f'WH_{i:03d}' for i in range(1, 6)]
+SHIPMENTS = [f'SHIP_{i:04d}' for i in range(1000, 1021)]
+TRUCKS = [f'TRUCK_{i:03d}' for i in range(1, 16)]
+SKUS = [f'SKU_{i:04d}' for i in range(2000, 2051)]
+PACKAGES = [f'PKG_{i:06d}' for i in range(500000, 500101)]
 
-THRESHOLD_LIMITS = {
-    'Temperature': 70,
-    'Vibration': 12,
-    'Humidity': 85,
-    'Power_Consumption': 280,
-    'Pressure': 9,
-    'CO2_Levels': 2500,
-    'Noise_Levels': 90
-}
-
-MACHINES = [f'Machine_{i}' for i in range(1, 6)]
-
-# =============================================================================
-# SUPPLY CHAIN PARAMETERS
-# =============================================================================
-WAREHOUSES = ['WH_North', 'WH_South', 'WH_East', 'WH_West', 'WH_Central']
-TRUCK_IDS = [f'TRUCK_{i:03d}' for i in range(1, 21)]
-SKU_LIST = [f'SKU_{i:04d}' for i in range(1000, 1051)]
-
-# GPS coordinates for realistic trucking routes (US cities)
-ROUTE_COORDINATES = [
+# GPS coordinates for realistic truck routes
+GPS_ROUTES = [
     (40.7128, -74.0060),   # New York
-    (34.0522, -118.2437),  # Los Angeles  
+    (34.0522, -118.2437),  # Los Angeles
     (41.8781, -87.6298),   # Chicago
     (29.7604, -95.3698),   # Houston
     (33.4484, -112.0740),  # Phoenix
     (39.9526, -75.1652),   # Philadelphia
-    (29.4241, -98.4936),   # San Antonio
     (32.7767, -96.7970),   # Dallas
     (37.7749, -122.4194),  # San Francisco
     (47.6062, -122.3321),  # Seattle
+    (25.7617, -80.1918),   # Miami
 ]
 
 # =============================================================================
@@ -78,836 +49,567 @@ ROUTE_COORDINATES = [
 # =============================================================================
 
 @st.cache_data
-def generate_factory_sensor_data():
-    """Generate simulated IoT sensor data for factory machines (last 7 days) with realistic patterns"""
+def generate_predictive_maintenance_data():
+    """Generate predictive maintenance data for machines"""
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=7)
+    timestamps = pd.date_range(start=start_time, end=end_time, freq='12T')
     
+    data = []
+    
+    # Machine profiles with different health conditions
+    machine_profiles = {
+        'Machine_01': {'health': 'excellent', 'age_months': 6},
+        'Machine_02': {'health': 'good', 'age_months': 18},
+        'Machine_03': {'health': 'warning', 'age_months': 36},
+        'Machine_04': {'health': 'critical', 'age_months': 60},
+        'Machine_05': {'health': 'good', 'age_months': 12},
+        'Machine_06': {'health': 'excellent', 'age_months': 3},
+        'Machine_07': {'health': 'warning', 'age_months': 42},
+        'Machine_08': {'health': 'good', 'age_months': 24},
+        'Machine_09': {'health': 'critical', 'age_months': 72},
+        'Machine_10': {'health': 'excellent', 'age_months': 9},
+    }
+    
+    for machine_id in MACHINES:
+        profile = machine_profiles[machine_id]
+        runtime_hours = profile['age_months'] * 30 * 16  # Assuming 16 hours/day operation
+        
+        for timestamp in timestamps:
+            # Base values depending on machine health
+            if profile['health'] == 'excellent':
+                base_vibration = np.random.uniform(2, 6)
+                base_temp = np.random.uniform(45, 65)
+                base_failure_risk = np.random.uniform(5, 15)
+            elif profile['health'] == 'good':
+                base_vibration = np.random.uniform(4, 8)
+                base_temp = np.random.uniform(50, 70)
+                base_failure_risk = np.random.uniform(15, 30)
+            elif profile['health'] == 'warning':
+                base_vibration = np.random.uniform(6, 11)
+                base_temp = np.random.uniform(60, 78)
+                base_failure_risk = np.random.uniform(30, 55)
+            else:  # critical
+                base_vibration = np.random.uniform(9, 15)
+                base_temp = np.random.uniform(70, 85)
+                base_failure_risk = np.random.uniform(55, 85)
+            
+            # Add operational patterns (higher during work hours)
+            hour = timestamp.hour
+            if 6 <= hour <= 22:  # Operating hours
+                operational_factor = 1.0 + 0.2 * np.sin(np.pi * (hour - 6) / 16)
+            else:  # Maintenance/idle time
+                operational_factor = 0.3
+            
+            vibration_rms = base_vibration * operational_factor + np.random.normal(0, 0.5)
+            temperature_C = base_temp * operational_factor + np.random.normal(0, 2)
+            
+            # Failure risk calculation based on thresholds
+            failure_risk_score = base_failure_risk
+            if vibration_rms > 12:
+                failure_risk_score += (vibration_rms - 12) * 5
+            if temperature_C > 80:
+                failure_risk_score += (temperature_C - 80) * 3
+            
+            failure_risk_score = min(100, max(0, failure_risk_score))
+            runtime_hours += 0.2  # Increment runtime
+            
+            data.append({
+                'timestamp': timestamp,
+                'machine_id': machine_id,
+                'vibration_rms': round(vibration_rms, 2),
+                'temperature_C': round(temperature_C, 1),
+                'runtime_hours': round(runtime_hours, 1),
+                'failure_risk_score': round(failure_risk_score, 1),
+                'health_status': profile['health']
+            })
+    
+    return pd.DataFrame(data)
+
+@st.cache_data
+def generate_machine_status_data():
+    """Generate machine status monitoring data"""
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
     timestamps = pd.date_range(start=start_time, end=end_time, freq='10T')
     
     data = []
     
-    # Define machine-specific characteristics for more realistic demo data
-    machine_profiles = {
-        'Machine_1': {'efficiency': 0.95, 'age': 2, 'maintenance_due': False},  # New, efficient
-        'Machine_2': {'efficiency': 0.85, 'age': 5, 'maintenance_due': True},   # Older, needs maintenance
-        'Machine_3': {'efficiency': 0.90, 'age': 3, 'maintenance_due': False}, # Average
-        'Machine_4': {'efficiency': 0.75, 'age': 8, 'maintenance_due': True},  # Old, problematic
-        'Machine_5': {'efficiency': 0.92, 'age': 1, 'maintenance_due': False}  # Almost new
-    }
-    
-    for machine in MACHINES:
-        machine_uptime = 0
-        daily_uptime_reset = start_time.date()
-        profile = machine_profiles[machine]
-        
-        for i, timestamp in enumerate(timestamps):
-            if timestamp.date() != daily_uptime_reset:
-                machine_uptime = 0
-                daily_uptime_reset = timestamp.date()
+    for machine_id in MACHINES:
+        for timestamp in timestamps:
+            hour = timestamp.hour
+            day_of_week = timestamp.weekday()
             
-            # Simulate downtime for maintenance or issues
-            is_running = True
-            if profile['maintenance_due'] and random.random() < 0.02:  # 2% chance of downtime
-                is_running = False
+            # Determine if machine should be running
+            if day_of_week < 5:  # Weekdays
+                if 6 <= hour <= 22:  # Work hours
+                    # 95% chance of running during work hours
+                    is_running = random.random() < 0.95
+                else:  # Off hours
+                    # 10% chance of running (maintenance, night shift)
+                    is_running = random.random() < 0.10
+            else:  # Weekends
+                # 30% chance of running on weekends
+                is_running = random.random() < 0.30
             
             if is_running:
-                machine_uptime += 1/6
+                status = 'Running'
+                rpm = np.random.uniform(1200, 1800) + np.sin(timestamp.hour * np.pi / 12) * 100
+                energy_kWh = np.random.uniform(15, 25) + np.random.normal(0, 2)
+            else:
+                status = 'Stopped'
+                rpm = 0
+                energy_kWh = np.random.uniform(0.5, 2.0)  # Standby power
             
-            row = {
-                'Timestamp': timestamp,
-                'Machine_ID': machine,
-                'Machine_Uptime': round(machine_uptime, 2)
-            }
-            
-            for sensor, (min_val, max_val) in SENSOR_RANGES.items():
-                if not is_running:
-                    # Machine is down - minimal readings
-                    if sensor == 'Temperature':
-                        value = np.random.uniform(20, 25)  # Ambient temperature
-                    elif sensor == 'Power_Consumption':
-                        value = np.random.uniform(10, 30)  # Standby power
-                    elif sensor == 'Vibration':
-                        value = np.random.uniform(0, 1)    # No vibration
-                    else:
-                        value = min_val + (max_val - min_val) * 0.1
-                else:
-                    # Normal operation with realistic patterns
-                    
-                    # Daily cycle (higher activity during work hours)
-                    hour_factor = np.sin(2 * np.pi * timestamp.hour / 24) * 0.15
-                    if 6 <= timestamp.hour <= 22:  # Work hours
-                        hour_factor += 0.2
-                    
-                    # Weekly cycle (lower on weekends)
-                    if timestamp.weekday() >= 5:  # Weekend
-                        hour_factor -= 0.1
-                    
-                    # Machine efficiency impact
-                    efficiency_factor = (1 - profile['efficiency']) * 0.3
-                    
-                    # Age-related degradation
-                    age_factor = profile['age'] * 0.02
-                    
-                    base_value = (min_val + max_val) / 2 + (max_val - min_val) * hour_factor
-                    base_value += (max_val - min_val) * (efficiency_factor + age_factor)
-                    
-                    # Sensor-specific realistic patterns
-                    if sensor == 'Temperature':
-                        # Temperature correlates with power and activity
-                        base_value += np.random.normal(0, 3)
-                        if profile['maintenance_due']:
-                            base_value += np.random.uniform(2, 8)  # Overheating
-                    
-                    elif sensor == 'Vibration':
-                        # Old machines vibrate more
-                        base_value += profile['age'] * 0.5
-                        if profile['maintenance_due']:
-                            base_value += np.random.uniform(1, 4)  # High vibration
-                    
-                    elif sensor == 'Power_Consumption':
-                        # Inefficient machines consume more power
-                        base_value *= (2 - profile['efficiency'])
-                    
-                    elif sensor == 'Pressure':
-                        # Pressure variations for hydraulic systems
-                        base_value += np.sin(i * 0.1) * 0.5  # Cyclic pressure
-                    
-                    elif sensor == 'CO2_Levels':
-                        # Higher during work hours, ventilation effects
-                        if 8 <= timestamp.hour <= 17:
-                            base_value += np.random.uniform(200, 800)
-                    
-                    elif sensor == 'Noise_Levels':
-                        # Correlates with vibration and activity
-                        base_value += profile['age'] * 2
-                        if profile['maintenance_due']:
-                            base_value += np.random.uniform(5, 15)
-                    
-                    # Add realistic noise
-                    noise = np.random.normal(0, (max_val - min_val) * 0.04)
-                    
-                    # Critical anomalies (equipment failures)
-                    if random.random() < 0.01:  # 1% chance of critical anomaly
-                        if sensor in ['Temperature', 'Vibration', 'Noise_Levels']:
-                            anomaly = np.random.uniform(0.3, 0.7) * (max_val - min_val)
-                            noise += anomaly
-                    
-                    # Minor anomalies
-                    elif random.random() < 0.05:  # 5% chance of minor anomaly
-                        anomaly = np.random.normal(0, (max_val - min_val) * 0.15)
-                        noise += anomaly
-                    
-                    value = base_value + noise
-                    value = np.clip(value, min_val, max_val)
+            # Add some variability for running machines
+            if status == 'Running':
+                # Occasional maintenance stops
+                if random.random() < 0.02:  # 2% chance
+                    status = 'Maintenance'
+                    rpm = 0
+                    energy_kWh = np.random.uniform(1, 3)
                 
-                row[sensor] = round(value, 2)
-            
-            data.append(row)
-    
-    return pd.DataFrame(data)
-
-@st.cache_data
-def generate_cold_chain_data():
-    """Generate cold chain monitoring data with realistic shipping scenarios (last 7 days, every 20 minutes)"""
-    
-    end_time = datetime.now()
-    start_time = end_time - timedelta(days=7)
-    timestamps = pd.date_range(start=start_time, end=end_time, freq='20T')
-    
-    data = []
-    
-    # Define shipment types with different temperature requirements
-    shipment_types = {
-        'SHIP_0100': {'type': 'Frozen', 'target_temp': -18, 'tolerance': 3, 'cargo': 'Ice Cream'},
-        'SHIP_0101': {'type': 'Chilled', 'target_temp': 4, 'tolerance': 2, 'cargo': 'Dairy Products'},
-        'SHIP_0102': {'type': 'Pharmaceuticals', 'target_temp': 3, 'tolerance': 1, 'cargo': 'Vaccines'},
-        'SHIP_0103': {'type': 'Fresh Produce', 'target_temp': 7, 'tolerance': 3, 'cargo': 'Vegetables'},
-        'SHIP_0104': {'type': 'Frozen', 'target_temp': -15, 'tolerance': 4, 'cargo': 'Seafood'},
-        'SHIP_0105': {'type': 'Chilled', 'target_temp': 2, 'tolerance': 2, 'cargo': 'Fresh Meat'},
-        'SHIP_0106': {'type': 'Blood Products', 'target_temp': 5, 'tolerance': 1, 'cargo': 'Blood Bank'},
-        'SHIP_0107': {'type': 'Fresh Produce', 'target_temp': 8, 'tolerance': 2, 'cargo': 'Fruits'},
-        'SHIP_0108': {'type': 'Frozen', 'target_temp': -20, 'tolerance': 2, 'cargo': 'Medical Samples'},
-        'SHIP_0109': {'type': 'Chilled', 'target_temp': 6, 'tolerance': 3, 'cargo': 'Beverages'},
-    }
-    
-    # Route profiles with different challenges
-    route_profiles = {
-        'Route_A': {'distance': 500, 'duration_hours': 8, 'difficulty': 'Easy'},      # Short local route
-        'Route_B': {'distance': 1200, 'duration_hours': 18, 'difficulty': 'Medium'},  # Medium route
-        'Route_C': {'distance': 2500, 'duration_hours': 36, 'difficulty': 'Hard'},    # Long cross-country
-        'Route_D': {'distance': 800, 'duration_hours': 12, 'difficulty': 'Medium'},   # Mountain route
-        'Route_E': {'distance': 300, 'duration_hours': 5, 'difficulty': 'Easy'},      # City delivery
-    }
-    
-    routes = list(route_profiles.keys())
-    
-    for shipment_id, ship_config in shipment_types.items():
-        truck_id = f"TRUCK_{random.randint(1, 20):03d}"
-        route = random.choice(routes)
-        route_config = route_profiles[route]
-        
-        # Select random coordinates for this route
-        route_coords = list(ROUTE_COORDINATES)
-        random.shuffle(route_coords)
-        route_coords = route_coords[:4]  # Use 4 waypoints
-        
-        # Calculate route progress
-        total_duration = len(timestamps)
-        
-        for i, timestamp in enumerate(timestamps):
-            # Calculate route progress (0 to 1)
-            progress = min(i / (total_duration * 0.8), 1.0)  # 80% of time for delivery
-            
-            # Interpolate GPS coordinates along route
-            if progress < 1.0:
-                coord_progress = progress * (len(route_coords) - 1)
-                coord_index = int(coord_progress)
-                coord_fraction = coord_progress - coord_index
-                
-                if coord_index < len(route_coords) - 1:
-                    lat1, lon1 = route_coords[coord_index]
-                    lat2, lon2 = route_coords[coord_index + 1]
-                    lat = lat1 + (lat2 - lat1) * coord_fraction
-                    lon = lon1 + (lon2 - lon1) * coord_fraction
-                else:
-                    lat, lon = route_coords[-1]
-            else:
-                # Delivered - at final destination
-                lat, lon = route_coords[-1]
-            
-            # Add GPS noise
-            lat += np.random.normal(0, 0.005)
-            lon += np.random.normal(0, 0.005)
-            
-            # Temperature simulation based on shipment type
-            target_temp = ship_config['target_temp']
-            tolerance = ship_config['tolerance']
-            
-            # Base temperature with small variations
-            temp_variation = np.random.normal(0, tolerance * 0.3)
-            
-            # Environmental factors
-            hour = timestamp.hour
-            
-            # Day/night temperature variations (external influence)
-            if 12 <= hour <= 16:  # Hot afternoon
-                external_influence = np.random.uniform(0.5, 2.0)
-            elif 2 <= hour <= 6:   # Cold night
-                external_influence = np.random.uniform(-1.0, -0.3)
-            else:
-                external_influence = np.random.uniform(-0.5, 0.5)
-            
-            # Route difficulty impact
-            if route_config['difficulty'] == 'Hard':
-                temp_variation += np.random.uniform(-1, 1.5)  # More temperature fluctuation
-            elif route_config['difficulty'] == 'Medium':
-                temp_variation += np.random.uniform(-0.5, 1.0)
-            
-            # Equipment issues (some trucks have problems)
-            if truck_id in ['TRUCK_007', 'TRUCK_015', 'TRUCK_018']:  # Problem trucks
-                if random.random() < 0.08:  # 8% chance of temperature excursion
-                    temp_variation += np.random.uniform(3, 12)
-            elif random.random() < 0.02:  # 2% chance for normal trucks
-                temp_variation += np.random.uniform(2, 8)
-            
-            cold_storage_temp = target_temp + temp_variation + external_influence * 0.3
-            
-            # Humidity simulation (inversely related to temperature for cold storage)
-            base_humidity = 65
-            humidity_variation = np.random.normal(0, 5)
-            
-            # Colder temperatures generally have lower humidity in the data
-            if cold_storage_temp < 0:
-                humidity = base_humidity - 10 + humidity_variation
-            else:
-                humidity = base_humidity + humidity_variation
-            
-            humidity = np.clip(humidity, 30, 95)
-            
-            # Door status simulation (realistic opening patterns)
-            door_status = 'closed'
-            
-            # More likely to open during loading/unloading times
-            if progress < 0.05 or progress > 0.95:  # Start or end of journey
-                if random.random() < 0.05:  # 5% chance during loading/unloading
-                    door_status = 'open'
-            elif random.random() < 0.008:  # 0.8% chance during transit
-                door_status = 'open'
-            
-            # Temperature spikes when door opens
-            if door_status == 'open':
-                if target_temp < 0:  # Frozen goods
-                    cold_storage_temp += np.random.uniform(5, 15)
-                else:  # Chilled goods
-                    cold_storage_temp += np.random.uniform(2, 8)
+                # Machine faults
+                elif random.random() < 0.005:  # 0.5% chance
+                    status = 'Fault'
+                    rpm = np.random.uniform(0, 500)
+                    energy_kWh = np.random.uniform(5, 15)
             
             data.append({
                 'timestamp': timestamp,
-                'shipment_id': shipment_id,
-                'truck_id': truck_id,
-                'cargo_type': ship_config['cargo'],
-                'route': route,
-                'cold_storage_temp': round(cold_storage_temp, 1),
-                'humidity': round(humidity, 1),
-                'latitude': round(lat, 4),
-                'longitude': round(lon, 4),
-                'door_status': door_status,
-                'route_progress': round(progress * 100, 1)
+                'machine_id': machine_id,
+                'rpm': round(rpm, 0),
+                'energy_kWh': round(energy_kWh, 2),
+                'status': status
             })
     
     return pd.DataFrame(data)
 
 @st.cache_data
-def generate_warehouse_environmental_data():
-    """Generate warehouse environmental monitoring data with realistic operational patterns"""
-    
+def generate_factory_environment_data():
+    """Generate factory environment monitoring data"""
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
     timestamps = pd.date_range(start=start_time, end=end_time, freq='15T')
     
     data = []
     
-    # Define warehouse characteristics for realistic demo data
-    warehouse_profiles = {
-        'WH_North': {
-            'type': 'Pharmaceutical Storage',
-            'size': 'Large',
-            'ventilation': 'Advanced',
-            'occupancy_peak': 150,
-            'hvac_efficiency': 0.95,
-            'issues': []
-        },
-        'WH_South': {
-            'type': 'Food Distribution',
-            'size': 'Medium', 
-            'ventilation': 'Standard',
-            'occupancy_peak': 80,
-            'hvac_efficiency': 0.85,
-            'issues': ['Old HVAC System']
-        },
-        'WH_East': {
-            'type': 'Electronics Storage',
-            'size': 'Small',
-            'ventilation': 'Advanced',
-            'occupancy_peak': 40,
-            'hvac_efficiency': 0.90,
-            'issues': []
-        },
-        'WH_West': {
-            'type': 'Chemical Storage',
-            'size': 'Large',
-            'ventilation': 'Industrial',
-            'occupancy_peak': 100,
-            'hvac_efficiency': 0.88,
-            'issues': ['Ventilation Maintenance Due']
-        },
-        'WH_Central': {
-            'type': 'General Storage',
-            'size': 'Medium',
-            'ventilation': 'Standard',
-            'occupancy_peak': 120,
-            'hvac_efficiency': 0.75,
-            'issues': ['CO2 Sensor Calibration', 'HVAC Filter Replacement']
-        }
+    # Zone characteristics
+    zone_profiles = {
+        'Zone_1': {'type': 'Production Floor', 'base_temp': 24, 'base_co2': 800},
+        'Zone_2': {'type': 'Assembly Line', 'base_temp': 22, 'base_co2': 900},
+        'Zone_3': {'type': 'Quality Control', 'base_temp': 20, 'base_co2': 600},
+        'Zone_4': {'type': 'Warehouse', 'base_temp': 18, 'base_co2': 500},
+        'Zone_5': {'type': 'Office Area', 'base_temp': 23, 'base_co2': 700},
+        'Zone_6': {'type': 'Chemical Storage', 'base_temp': 16, 'base_co2': 450},
+        'Zone_7': {'type': 'Loading Dock', 'base_temp': 26, 'base_co2': 1000},
     }
     
-    for warehouse_id in WAREHOUSES:
-        profile = warehouse_profiles[warehouse_id]
+    for zone_id in FACTORY_ZONES:
+        profile = zone_profiles[zone_id]
         
         for timestamp in timestamps:
             hour = timestamp.hour
             day_of_week = timestamp.weekday()
             
-            # Simulate occupancy patterns (affects CO2 and temperature)
-            if day_of_week < 5:  # Weekday
-                if 7 <= hour <= 18:  # Work hours
-                    occupancy_factor = 0.6 + 0.4 * np.sin(np.pi * (hour - 7) / 11)
-                elif 19 <= hour <= 22:  # Evening shift
-                    occupancy_factor = 0.3
-                else:  # Night
-                    occupancy_factor = 0.05
-            else:  # Weekend
-                occupancy_factor = 0.1 if 9 <= hour <= 15 else 0.02
-            
-            current_occupancy = int(profile['occupancy_peak'] * occupancy_factor)
-            
-            # CO2 Level Simulation
-            base_co2 = 420  # Outdoor baseline
-            
-            # Occupancy impact (people generate CO2)
-            occupancy_co2 = current_occupancy * np.random.uniform(8, 15)
-            
-            # Ventilation efficiency impact
-            ventilation_efficiency = {
-                'Advanced': 0.9, 'Industrial': 0.85, 'Standard': 0.7
-            }[profile['ventilation']]
-            
-            co2_buildup = occupancy_co2 * (1 - ventilation_efficiency)
-            
-            # HVAC efficiency impact
-            hvac_factor = 1 - profile['hvac_efficiency']
-            co2_buildup *= (1 + hvac_factor)
-            
-            # Warehouse-specific issues
-            if 'CO2 Sensor Calibration' in profile['issues']:
-                co2_buildup *= np.random.uniform(1.2, 1.5)  # Higher readings due to calibration
-            
-            if 'Ventilation Maintenance Due' in profile['issues']:
-                co2_buildup *= np.random.uniform(1.3, 1.8)  # Poor ventilation performance
-            
-            # Environmental variations
-            co2_variation = np.random.normal(0, 50)
-            
-            # Special events (deliveries, equipment operation)
-            if random.random() < 0.15:  # 15% chance of special activity
-                co2_variation += np.random.uniform(100, 300)
-            
-            # Critical CO2 events (ventilation failure)
-            if random.random() < 0.008:  # 0.8% chance of critical event
-                co2_variation += np.random.uniform(800, 1500)
-            
-            co2_level = base_co2 + co2_buildup + co2_variation
-            co2_level = max(400, co2_level)  # Minimum outdoor level
-            
-            # Temperature Simulation
-            base_temp_target = {
-                'Pharmaceutical Storage': 20, 'Food Distribution': 18,
-                'Electronics Storage': 22, 'Chemical Storage': 19,
-                'General Storage': 21
-            }[profile['type']]
-            
-            # External temperature influence (day/night cycle)
-            external_temp_factor = 2 * np.sin(2 * np.pi * (hour - 6) / 24)
-            
-            # Occupancy heat generation
-            occupancy_heat = current_occupancy * 0.1
-            
-            # HVAC effectiveness
-            hvac_control = profile['hvac_efficiency']
-            temp_variation = np.random.normal(0, 2 * (1 - hvac_control))
-            
-            # System issues
-            if 'Old HVAC System' in profile['issues']:
-                temp_variation += np.random.uniform(-1, 3)  # Less stable temperature
-            
-            temp_warehouse = (base_temp_target + 
-                            external_temp_factor * (1 - hvac_control) + 
-                            occupancy_heat * (1 - hvac_control) + 
-                            temp_variation)
-            
-            # Humidity Simulation
-            base_humidity = 45
-            
-            # Seasonal variations
-            if timestamp.month in [6, 7, 8]:  # Summer
-                humidity_base_adj = 5
-            elif timestamp.month in [12, 1, 2]:  # Winter
-                humidity_base_adj = -5
+            # Activity level affects environment
+            if day_of_week < 5 and 6 <= hour <= 22:  # Work hours
+                activity_factor = 0.7 + 0.3 * np.sin(np.pi * (hour - 6) / 16)
             else:
-                humidity_base_adj = 0
+                activity_factor = 0.2
             
-            # Occupancy impact on humidity
-            humidity_occupancy = current_occupancy * 0.15
+            # Temperature
+            external_temp = 15 + 10 * np.sin(2 * np.pi * (hour - 6) / 24)  # Daily cycle
+            temperature_C = (profile['base_temp'] + 
+                           external_temp * 0.1 + 
+                           activity_factor * 5 + 
+                           np.random.normal(0, 1.5))
             
-            # Ventilation impact
-            humidity_control = ventilation_efficiency * 0.8
-            humidity_variation = np.random.normal(0, 8 * (1 - humidity_control))
+            # Humidity (inversely related to temperature)
+            humidity_percent = 60 - (temperature_C - 20) * 1.5 + np.random.normal(0, 5)
+            humidity_percent = np.clip(humidity_percent, 30, 85)
             
-            humidity = (base_humidity + humidity_base_adj + 
-                       humidity_occupancy * (1 - humidity_control) + 
-                       humidity_variation)
-            humidity = np.clip(humidity, 20, 90)
+            # CO2 levels
+            co2_ppm = (profile['base_co2'] + 
+                      activity_factor * 500 + 
+                      np.random.normal(0, 100))
             
-            # Air Quality Index Simulation
-            base_aqi = 25  # Good air quality baseline
+            # Occasional CO2 spikes
+            if random.random() < 0.03:  # 3% chance
+                co2_ppm += np.random.uniform(300, 800)
             
-            # CO2 correlation
-            if co2_level > 1000:
-                aqi_co2_impact = (co2_level - 1000) * 0.05
+            co2_ppm = max(400, co2_ppm)
+            
+            # Air Quality Index
+            base_aqi = 25
+            if co2_ppm > 1000:
+                aqi_co2_impact = (co2_ppm - 1000) * 0.05
             else:
                 aqi_co2_impact = 0
             
-            # Occupancy and activity impact
-            aqi_activity = current_occupancy * 0.3
+            aqi = base_aqi + aqi_co2_impact + activity_factor * 20 + np.random.normal(0, 10)
+            aqi = max(0, aqi)
             
-            # Warehouse type impact
-            type_aqi_impact = {
-                'Chemical Storage': 15, 'Food Distribution': 5,
-                'Pharmaceutical Storage': 2, 'Electronics Storage': 3,
-                'General Storage': 8
-            }[profile['type']]
+            # Noise levels
+            if profile['type'] in ['Production Floor', 'Assembly Line', 'Loading Dock']:
+                base_noise = 75
+            elif profile['type'] in ['Quality Control', 'Office Area']:
+                base_noise = 45
+            else:
+                base_noise = 55
             
-            # Equipment and ventilation impact
-            aqi_equipment = np.random.uniform(0, 20) * (1 - ventilation_efficiency)
+            noise_db = base_noise + activity_factor * 15 + np.random.normal(0, 5)
             
-            # Special events (chemical spills, dust, etc.)
-            if random.random() < 0.02:  # 2% chance of air quality event
-                aqi_equipment += np.random.uniform(30, 80)
+            # Occasional noise spikes
+            if random.random() < 0.05:  # 5% chance
+                noise_db += np.random.uniform(10, 25)
             
-            aqi_variation = np.random.normal(0, 15)
+            data.append({
+                'timestamp': timestamp,
+                'zone_id': zone_id,
+                'zone_type': profile['type'],
+                'temperature_C': round(temperature_C, 1),
+                'humidity_percent': round(humidity_percent, 1),
+                'co2_ppm': round(co2_ppm, 0),
+                'aqi': round(aqi, 0),
+                'noise_db': round(noise_db, 1)
+            })
+    
+    return pd.DataFrame(data)
+
+@st.cache_data
+def generate_oee_data():
+    """Generate Production Line OEE tracking data"""
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=7)
+    timestamps = pd.date_range(start=start_time, end=end_time, freq='30T')  # Every 30 minutes
+    
+    data = []
+    
+    # Production line profiles
+    line_profiles = {
+        'Line_A': {'efficiency': 0.92, 'reliability': 0.95, 'product': 'Electronics'},
+        'Line_B': {'efficiency': 0.88, 'reliability': 0.90, 'product': 'Automotive'},
+        'Line_C': {'efficiency': 0.94, 'reliability': 0.97, 'product': 'Pharmaceuticals'},
+        'Line_D': {'efficiency': 0.85, 'reliability': 0.87, 'product': 'Food Processing'},
+        'Line_E': {'efficiency': 0.90, 'reliability': 0.92, 'product': 'Textiles'},
+    }
+    
+    for line_id in PRODUCTION_LINES:
+        profile = line_profiles[line_id]
+        
+        for timestamp in timestamps:
+            hour = timestamp.hour
+            day_of_week = timestamp.weekday()
             
-            air_quality_index = (base_aqi + aqi_co2_impact + aqi_activity + 
-                               type_aqi_impact + aqi_equipment + aqi_variation)
-            air_quality_index = max(0, air_quality_index)
+            if day_of_week < 5 and 6 <= hour <= 22:  # Work hours
+                # Base performance during work hours
+                base_availability = profile['reliability'] * 100
+                base_performance = profile['efficiency'] * 100
+                base_quality = np.random.uniform(92, 98)
+                
+                # Shift patterns
+                if 6 <= hour <= 14:  # Morning shift (usually best)
+                    shift_factor = 1.0
+                elif 14 <= hour <= 22:  # Evening shift
+                    shift_factor = 0.95
+                else:  # Night shift
+                    shift_factor = 0.90
+                
+            else:  # Off hours/weekends
+                base_availability = np.random.uniform(10, 30)  # Minimal operations
+                base_performance = np.random.uniform(20, 50)
+                base_quality = np.random.uniform(85, 95)
+                shift_factor = 0.8
+            
+            # Add variability
+            availability_percent = base_availability * shift_factor + np.random.normal(0, 3)
+            performance_percent = base_performance * shift_factor + np.random.normal(0, 4)
+            quality_percent = base_quality + np.random.normal(0, 2)
+            
+            # Ensure realistic bounds
+            availability_percent = np.clip(availability_percent, 0, 100)
+            performance_percent = np.clip(performance_percent, 0, 100)
+            quality_percent = np.clip(quality_percent, 70, 100)
+            
+            # Occasional issues
+            if random.random() < 0.05:  # 5% chance of issues
+                availability_percent *= np.random.uniform(0.6, 0.9)
+                performance_percent *= np.random.uniform(0.7, 0.9)
+            
+            if random.random() < 0.02:  # 2% chance of quality issues
+                quality_percent *= np.random.uniform(0.8, 0.95)
+            
+            # Calculate OEE
+            oee_percent = (availability_percent * performance_percent * quality_percent) / 10000
+            
+            data.append({
+                'timestamp': timestamp,
+                'line_id': line_id,
+                'product_type': profile['product'],
+                'availability_percent': round(availability_percent, 1),
+                'performance_percent': round(performance_percent, 1),
+                'quality_percent': round(quality_percent, 1),
+                'oee_percent': round(oee_percent, 1)
+            })
+    
+    return pd.DataFrame(data)
+
+@st.cache_data
+def generate_cold_chain_data():
+    """Generate cold chain monitoring data"""
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=7)
+    timestamps = pd.date_range(start=start_time, end=end_time, freq='20T')
+    
+    data = []
+    
+    # Shipment types
+    shipment_configs = {
+        'SHIP_1000': {'target_temp': -18, 'tolerance': 2, 'cargo': 'Frozen Foods'},
+        'SHIP_1001': {'target_temp': 4, 'tolerance': 2, 'cargo': 'Dairy Products'},
+        'SHIP_1002': {'target_temp': 2, 'tolerance': 1, 'cargo': 'Vaccines'},
+        'SHIP_1003': {'target_temp': 6, 'tolerance': 3, 'cargo': 'Fresh Produce'},
+        'SHIP_1004': {'target_temp': -15, 'tolerance': 3, 'cargo': 'Ice Cream'},
+        'SHIP_1005': {'target_temp': 3, 'tolerance': 1, 'cargo': 'Blood Products'},
+        'SHIP_1006': {'target_temp': 8, 'tolerance': 2, 'cargo': 'Beverages'},
+        'SHIP_1007': {'target_temp': -20, 'tolerance': 2, 'cargo': 'Medical Samples'},
+        'SHIP_1008': {'target_temp': 5, 'tolerance': 2, 'cargo': 'Meat Products'},
+        'SHIP_1009': {'target_temp': 7, 'tolerance': 3, 'cargo': 'Chemicals'},
+    }
+    
+    for i, (shipment_id, config) in enumerate(list(shipment_configs.items())[:10]):
+        truck_id = TRUCKS[i % len(TRUCKS)]
+        route_coords = GPS_ROUTES[i % len(GPS_ROUTES)]
+        
+        for j, timestamp in enumerate(timestamps):
+            # Simulate route progress
+            progress = min(j / len(timestamps), 1.0)
+            
+            # GPS coordinates with route simulation
+            base_lat, base_lon = route_coords
+            gps_lat = base_lat + progress * np.random.uniform(-2, 2) + np.random.normal(0, 0.01)
+            gps_lon = base_lon + progress * np.random.uniform(-2, 2) + np.random.normal(0, 0.01)
+            
+            # Temperature simulation
+            target_temp = config['target_temp']
+            tolerance = config['tolerance']
+            
+            temp_variation = np.random.normal(0, tolerance * 0.5)
+            
+            # External factors
+            hour = timestamp.hour
+            if 12 <= hour <= 16:  # Hot afternoon
+                external_factor = np.random.uniform(0.5, 2.0)
+            elif 2 <= hour <= 6:  # Cold night
+                external_factor = np.random.uniform(-1.0, -0.3)
+            else:
+                external_factor = np.random.uniform(-0.5, 0.5)
+            
+            # Equipment malfunctions
+            if truck_id in ['TRUCK_003', 'TRUCK_007', 'TRUCK_012']:  # Problem trucks
+                if random.random() < 0.08:  # 8% chance of temperature excursion
+                    temp_variation += np.random.uniform(5, 15)
+            elif random.random() < 0.02:  # 2% chance for normal trucks
+                temp_variation += np.random.uniform(3, 10)
+            
+            cold_storage_temp = target_temp + temp_variation + external_factor * 0.3
+            
+            # Humidity
+            humidity = np.random.uniform(60, 85) + np.random.normal(0, 5)
+            humidity = np.clip(humidity, 40, 95)
+            
+            # Door status
+            door_status = 'closed'
+            if progress < 0.05 or progress > 0.95:  # Loading/unloading
+                if random.random() < 0.1:  # 10% chance
+                    door_status = 'open'
+            elif random.random() < 0.01:  # 1% chance during transit
+                door_status = 'open'
+            
+            data.append({
+                'timestamp': timestamp,
+                'shipment_id': shipment_id,
+                'truck_id': truck_id,
+                'cargo_type': config['cargo'],
+                'cold_storage_temp': round(cold_storage_temp, 1),
+                'humidity': round(humidity, 1),
+                'gps_lat': round(gps_lat, 4),
+                'gps_lon': round(gps_lon, 4),
+                'door_status': door_status,
+                'target_temp': target_temp
+            })
+    
+    return pd.DataFrame(data)
+
+@st.cache_data
+def generate_warehouse_environment_data():
+    """Generate warehouse environment monitoring data"""
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=7)
+    timestamps = pd.date_range(start=start_time, end=end_time, freq='15T')
+    
+    data = []
+    
+    for warehouse_id in WAREHOUSES:
+        for timestamp in timestamps:
+            hour = timestamp.hour
+            day_of_week = timestamp.weekday()
+            
+            # Activity level
+            if day_of_week < 5 and 6 <= hour <= 18:  # Work hours
+                activity = 0.8
+            elif day_of_week < 5 and 18 <= hour <= 22:  # Evening
+                activity = 0.4
+            else:  # Off hours/weekends
+                activity = 0.1
+            
+            # Temperature
+            base_temp = 20
+            temp = base_temp + activity * 3 + np.random.normal(0, 2)
+            
+            # Humidity
+            humidity = 50 + activity * 10 + np.random.normal(0, 8)
+            humidity = np.clip(humidity, 30, 80)
+            
+            # CO2
+            base_co2 = 450
+            co2 = base_co2 + activity * 600 + np.random.normal(0, 100)
+            
+            # CO2 spikes
+            if random.random() < 0.03:
+                co2 += np.random.uniform(400, 1000)
+            
+            # AQI
+            aqi = 30 + activity * 40
+            if co2 > 1000:
+                aqi += (co2 - 1000) * 0.03
+            aqi += np.random.normal(0, 15)
+            aqi = max(0, aqi)
             
             data.append({
                 'timestamp': timestamp,
                 'warehouse_id': warehouse_id,
-                'warehouse_type': profile['type'],
-                'current_occupancy': current_occupancy,
-                'co2_level_ppm': round(co2_level, 0),
-                'temp_warehouse': round(temp_warehouse, 1),
+                'temp': round(temp, 1),
                 'humidity': round(humidity, 1),
-                'air_quality_index': round(air_quality_index, 0)
+                'co2': round(co2, 0),
+                'aqi': round(aqi, 0)
             })
     
     return pd.DataFrame(data)
 
 @st.cache_data
 def generate_inventory_data():
-    """Generate inventory monitoring data with realistic product categories and stock patterns"""
-    
+    """Generate inventory level tracking data"""
     end_time = datetime.now()
-    start_time = end_time - timedelta(days=7) 
-    timestamps = pd.date_range(start=start_time, end=end_time, freq='30T')
+    start_time = end_time - timedelta(days=7)
+    timestamps = pd.date_range(start=start_time, end=end_time, freq='60T')  # Hourly
     
     data = []
     
-    # Define product categories with realistic inventory patterns
-    product_categories = {
-        'SKU_1001': {'category': 'Electronics', 'product': 'Smartphones', 'velocity': 'High', 'seasonality': 'Low'},
-        'SKU_1002': {'category': 'Electronics', 'product': 'Laptops', 'velocity': 'Medium', 'seasonality': 'Medium'},
-        'SKU_1003': {'category': 'Clothing', 'product': 'Winter Jackets', 'velocity': 'Medium', 'seasonality': 'High'},
-        'SKU_1004': {'category': 'Food', 'product': 'Canned Goods', 'velocity': 'High', 'seasonality': 'Low'},
-        'SKU_1005': {'category': 'Automotive', 'product': 'Brake Pads', 'velocity': 'Low', 'seasonality': 'Low'},
-        'SKU_1006': {'category': 'Healthcare', 'product': 'Surgical Masks', 'velocity': 'High', 'seasonality': 'Medium'},
-        'SKU_1007': {'category': 'Home & Garden', 'product': 'Garden Tools', 'velocity': 'Medium', 'seasonality': 'High'},
-        'SKU_1008': {'category': 'Books', 'product': 'Technical Manuals', 'velocity': 'Low', 'seasonality': 'Low'},
-        'SKU_1009': {'category': 'Sports', 'product': 'Fitness Equipment', 'velocity': 'Medium', 'seasonality': 'Medium'},
-        'SKU_1010': {'category': 'Toys', 'product': 'Educational Toys', 'velocity': 'High', 'seasonality': 'High'},
-        
-        'SKU_1011': {'category': 'Electronics', 'product': 'Tablets', 'velocity': 'Medium', 'seasonality': 'Low'},
-        'SKU_1012': {'category': 'Clothing', 'product': 'Summer Apparel', 'velocity': 'High', 'seasonality': 'High'},
-        'SKU_1013': {'category': 'Food', 'product': 'Frozen Foods', 'velocity': 'High', 'seasonality': 'Low'},
-        'SKU_1014': {'category': 'Automotive', 'product': 'Oil Filters', 'velocity': 'Medium', 'seasonality': 'Low'},
-        'SKU_1015': {'category': 'Healthcare', 'product': 'First Aid Kits', 'velocity': 'Low', 'seasonality': 'Low'},
-        'SKU_1016': {'category': 'Home & Garden', 'product': 'Power Tools', 'velocity': 'Medium', 'seasonality': 'Medium'},
-        'SKU_1017': {'category': 'Books', 'product': 'Novels', 'velocity': 'Low', 'seasonality': 'Low'},
-        'SKU_1018': {'category': 'Sports', 'product': 'Running Shoes', 'velocity': 'High', 'seasonality': 'Medium'},
-        'SKU_1019': {'category': 'Beauty', 'product': 'Skincare Products', 'velocity': 'Medium', 'seasonality': 'Low'},
-        'SKU_1020': {'category': 'Office', 'product': 'Printer Paper', 'velocity': 'High', 'seasonality': 'Low'},
-        
-        'SKU_1021': {'category': 'Electronics', 'product': 'Headphones', 'velocity': 'High', 'seasonality': 'Medium'},
-        'SKU_1022': {'category': 'Clothing', 'product': 'Work Uniforms', 'velocity': 'Medium', 'seasonality': 'Low'},
-        'SKU_1023': {'category': 'Food', 'product': 'Snack Foods', 'velocity': 'High', 'seasonality': 'Low'},
-        'SKU_1024': {'category': 'Automotive', 'product': 'Tire Gauges', 'velocity': 'Low', 'seasonality': 'Low'},
-        'SKU_1025': {'category': 'Healthcare', 'product': 'Thermometers', 'velocity': 'Medium', 'seasonality': 'Medium'},
-        'SKU_1026': {'category': 'Home & Garden', 'product': 'Light Bulbs', 'velocity': 'Medium', 'seasonality': 'Low'},
-        'SKU_1027': {'category': 'Books', 'product': 'Children Books', 'velocity': 'Medium', 'seasonality': 'Medium'},
-        'SKU_1028': {'category': 'Sports', 'product': 'Yoga Mats', 'velocity': 'Medium', 'seasonality': 'Medium'},
-        'SKU_1029': {'category': 'Beauty', 'product': 'Hair Products', 'velocity': 'Medium', 'seasonality': 'Low'},
-        'SKU_1030': {'category': 'Office', 'product': 'Staplers', 'velocity': 'Low', 'seasonality': 'Low'},
-    }
+    # SKU configurations
+    sku_configs = {}
+    for i, sku_id in enumerate(SKUS[:25]):  # Use first 25 SKUs
+        sku_configs[sku_id] = {
+            'initial_stock': np.random.randint(100, 1000),
+            'reorder_point': np.random.randint(50, 200),
+            'consumption_rate': np.random.uniform(0.5, 5.0),  # Units per hour
+            'warehouse_id': WAREHOUSES[i % len(WAREHOUSES)]
+        }
     
-    for sku_id, product_info in product_categories.items():
-        warehouse_id = random.choice(WAREHOUSES)
-        
-        # Set inventory parameters based on product characteristics
-        velocity_multipliers = {'High': 3.0, 'Medium': 1.5, 'Low': 0.5}
-        velocity = velocity_multipliers[product_info['velocity']]
-        
-        # Initial stock levels based on velocity
-        if product_info['velocity'] == 'High':
-            initial_stock = np.random.randint(200, 800)
-            reorder_threshold = np.random.randint(50, 150)
-        elif product_info['velocity'] == 'Medium':
-            initial_stock = np.random.randint(100, 400)
-            reorder_threshold = np.random.randint(25, 80)
-        else:  # Low velocity
-            initial_stock = np.random.randint(50, 200)
-            reorder_threshold = np.random.randint(10, 40)
-        
-        current_stock = initial_stock
-        days_since_restock = 0
+    for sku_id, config in sku_configs.items():
+        current_stock = config['initial_stock']
+        warehouse_id = config['warehouse_id']
+        reorder_point = config['reorder_point']
         
         for timestamp in timestamps:
             hour = timestamp.hour
             day_of_week = timestamp.weekday()
             
-            # Consumption patterns based on time and product type
-            consumption_probability = 0.2  # Base 20% chance
+            # Consumption patterns
+            if day_of_week < 5 and 8 <= hour <= 17:  # Business hours
+                consumption_multiplier = 1.0
+            elif day_of_week < 5:  # Weekday off-hours
+                consumption_multiplier = 0.3
+            else:  # Weekends
+                consumption_multiplier = 0.5
             
-            # Business hours increase consumption
-            if 8 <= hour <= 18 and day_of_week < 5:  # Business hours, weekdays
-                consumption_probability *= 1.5
-            elif day_of_week >= 5:  # Weekends
-                if product_info['category'] in ['Food', 'Electronics', 'Clothing']:
-                    consumption_probability *= 1.2  # Consumer goods move more on weekends
-                else:
-                    consumption_probability *= 0.6  # B2B products move less
-            
-            # Seasonal effects
-            month = timestamp.month
-            if product_info['seasonality'] == 'High':
-                if product_info['product'] in ['Winter Jackets'] and month in [10, 11, 12, 1, 2]:
-                    consumption_probability *= 2.0
-                elif product_info['product'] in ['Summer Apparel', 'Garden Tools'] and month in [4, 5, 6, 7, 8]:
-                    consumption_probability *= 2.0
-                elif product_info['product'] in ['Educational Toys'] and month in [11, 12]:  # Holiday season
-                    consumption_probability *= 1.8
-            
-            # Apply velocity factor
-            consumption_probability *= velocity
-            
-            # Simulate stock consumption
-            if random.random() < consumption_probability:
-                if product_info['velocity'] == 'High':
-                    consumption = np.random.randint(5, 25)
-                elif product_info['velocity'] == 'Medium':
-                    consumption = np.random.randint(2, 12)
-                else:  # Low velocity
-                    consumption = np.random.randint(1, 5)
-                
-                current_stock = max(0, current_stock - consumption)
+            # Apply consumption
+            consumption = config['consumption_rate'] * consumption_multiplier + np.random.normal(0, 0.5)
+            consumption = max(0, consumption)
+            current_stock = max(0, current_stock - consumption)
             
             # Restocking logic
-            restock_scheduled = False
-            if current_stock <= reorder_threshold:
-                restock_scheduled = True
-                days_since_restock += 0.5/24  # 30 minutes
-                
-                # Restocking happens after some delay (1-3 days typically)
-                restock_delay_threshold = np.random.uniform(1, 4)  # days
-                
-                if days_since_restock >= restock_delay_threshold:
-                    # Calculate restock quantity
-                    if product_info['velocity'] == 'High':
-                        restock_quantity = np.random.randint(300, 1000)
-                    elif product_info['velocity'] == 'Medium':
-                        restock_quantity = np.random.randint(150, 500)
-                    else:  # Low velocity
-                        restock_quantity = np.random.randint(75, 250)
-                    
-                    current_stock += restock_quantity
-                    restock_scheduled = False
-                    days_since_restock = 0
+            if current_stock <= reorder_point:
+                # Simulate restocking delay
+                if random.random() < 0.1:  # 10% chance per hour of restocking
+                    restock_amount = np.random.randint(200, 800)
+                    current_stock += restock_amount
+                    restock_eta = None
+                else:
+                    restock_eta = np.random.randint(6, 48)  # Hours until restock
             else:
-                days_since_restock = 0
-            
-            # Emergency stock situations (supplier delays, quality issues)
-            if random.random() < 0.001:  # 0.1% chance of supply chain disruption
-                current_stock = max(0, int(current_stock * np.random.uniform(0.1, 0.5)))
-            
-            # Stock adjustments (inventory corrections, damaged goods)
-            if random.random() < 0.005:  # 0.5% chance of stock adjustment
-                adjustment = np.random.randint(-10, 5)  # Usually losses
-                current_stock = max(0, current_stock + adjustment)
+                restock_eta = None
             
             data.append({
                 'timestamp': timestamp,
                 'sku_id': sku_id,
-                'product_name': product_info['product'],
-                'category': product_info['category'],
                 'warehouse_id': warehouse_id,
-                'stock_level': current_stock,
-                'reorder_threshold': reorder_threshold,
-                'restock_scheduled': restock_scheduled,
-                'velocity': product_info['velocity'],
-                'days_since_restock': round(days_since_restock, 2)
+                'stock_level': round(current_stock, 0),
+                'reorder_point': reorder_point,
+                'restock_eta': restock_eta
             })
     
     return pd.DataFrame(data)
 
 @st.cache_data
-def generate_package_tampering_data():
-    """Generate package tampering detection data with realistic shipping scenarios and security events"""
-    
+def generate_package_tamper_data():
+    """Generate package tampering detection data"""
     end_time = datetime.now()
     start_time = end_time - timedelta(days=7)
-    timestamps = pd.date_range(start=start_time, end=end_time, freq='25T')
+    timestamps = pd.date_range(start=start_time, end=end_time, freq='30T')
     
     data = []
     
-    # Define package types with different security requirements
-    package_types = {
-        'PKG_100001': {'type': 'Electronics', 'value': 'High', 'fragile': True, 'security': 'Standard'},
-        'PKG_100002': {'type': 'Pharmaceuticals', 'value': 'High', 'fragile': False, 'security': 'High'},
-        'PKG_100003': {'type': 'Jewelry', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
-        'PKG_100004': {'type': 'Documents', 'value': 'Medium', 'fragile': False, 'security': 'High'},
-        'PKG_100005': {'type': 'Artwork', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
-        'PKG_100006': {'type': 'Books', 'value': 'Low', 'fragile': False, 'security': 'Standard'},
-        'PKG_100007': {'type': 'Medical Devices', 'value': 'High', 'fragile': True, 'security': 'High'},
-        'PKG_100008': {'type': 'Clothing', 'value': 'Medium', 'fragile': False, 'security': 'Standard'},
-        'PKG_100009': {'type': 'Chemicals', 'value': 'Medium', 'fragile': False, 'security': 'High'},
-        'PKG_100010': {'type': 'Computer Parts', 'value': 'High', 'fragile': True, 'security': 'High'},
-        
-        'PKG_100011': {'type': 'Watches', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
-        'PKG_100012': {'type': 'Cosmetics', 'value': 'Medium', 'fragile': False, 'security': 'Standard'},
-        'PKG_100013': {'type': 'Rare Coins', 'value': 'Very High', 'fragile': False, 'security': 'Maximum'},
-        'PKG_100014': {'type': 'Legal Documents', 'value': 'High', 'fragile': False, 'security': 'High'},
-        'PKG_100015': {'type': 'Prototypes', 'value': 'Very High', 'fragile': True, 'security': 'Maximum'},
-        'PKG_100016': {'type': 'Textbooks', 'value': 'Low', 'fragile': False, 'security': 'Standard'},
-        'PKG_100017': {'type': 'Laboratory Equipment', 'value': 'High', 'fragile': True, 'security': 'High'},
-        'PKG_100018': {'type': 'Samples', 'value': 'Medium', 'fragile': True, 'security': 'High'},
-        'PKG_100019': {'type': 'Optical Equipment', 'value': 'High', 'fragile': True, 'security': 'High'},
-        'PKG_100020': {'type': 'Data Storage', 'value': 'High', 'fragile': False, 'security': 'Maximum'},
-    }
-    
-    # Shipping phase tracking
-    shipping_phases = ['Pickup', 'Transit', 'Hub_Processing', 'Last_Mile', 'Delivered']
-    
-    for package_id, package_info in package_types.items():
-        # Determine shipping duration and phases
-        total_shipping_time = len(timestamps)
-        phase_durations = {
-            'Pickup': int(total_shipping_time * 0.05),      # 5% - pickup phase
-            'Transit': int(total_shipping_time * 0.60),     # 60% - main transit
-            'Hub_Processing': int(total_shipping_time * 0.15), # 15% - hub processing
-            'Last_Mile': int(total_shipping_time * 0.15),   # 15% - last mile delivery
-            'Delivered': int(total_shipping_time * 0.05)    # 5% - delivered
-        }
-        
-        current_phase = 'Pickup'
-        phase_progress = 0
-        
-        for i, timestamp in enumerate(timestamps):
-            # Determine current shipping phase
-            total_progress = 0
-            for phase, duration in phase_durations.items():
-                if i < total_progress + duration:
-                    current_phase = phase
-                    phase_progress = i - total_progress
-                    break
-                total_progress += duration
+    for package_id in PACKAGES[:50]:  # Use first 50 packages
+        for timestamp in timestamps:
+            # Normal tilt angle (0-15 degrees)
+            tilt_angle = np.random.uniform(0, 10) + np.random.normal(0, 2)
             
-            # Base tilt angle (normal handling)
-            base_tilt = np.random.uniform(0, 8)
+            # Occasional high tilt events (drops, mishandling)
+            if random.random() < 0.02:  # 2% chance
+                tilt_angle += np.random.uniform(30, 80)
             
-            # Phase-specific tilt patterns
-            if current_phase == 'Pickup':
-                # More movement during pickup
-                base_tilt += np.random.uniform(0, 5)
-            elif current_phase == 'Transit':
-                # Generally stable during transit
-                base_tilt += np.random.uniform(0, 3)
-                # Occasional road bumps
-                if random.random() < 0.05:
-                    base_tilt += np.random.uniform(5, 15)
-            elif current_phase == 'Hub_Processing':
-                # More handling at hubs
-                base_tilt += np.random.uniform(0, 8)
-                # Sorting equipment can cause tilting
-                if random.random() < 0.08:
-                    base_tilt += np.random.uniform(10, 25)
-            elif current_phase == 'Last_Mile':
-                # Local delivery variations
-                base_tilt += np.random.uniform(0, 6)
+            tilt_angle = max(0, tilt_angle)
             
-            # Package-specific tilt sensitivity
-            if package_info['fragile']:
-                # Fragile packages are handled more carefully usually
-                base_tilt *= 0.8
-                # But occasionally get mishandled
-                if random.random() < 0.02:
-                    base_tilt += np.random.uniform(20, 50)
+            # Light exposure (normal: 0-200 lux)
+            light_exposure_lux = np.random.uniform(10, 150) + np.random.normal(0, 20)
             
-            # Security level impact (higher security = more careful handling)
-            security_multipliers = {'Standard': 1.0, 'High': 0.8, 'Maximum': 0.6}
-            base_tilt *= security_multipliers[package_info['security']]
+            # Tampering attempts (high light exposure)
+            if random.random() < 0.01:  # 1% chance
+                light_exposure_lux += np.random.uniform(800, 2000)
             
-            # Critical tilt events (drops, mishandling)
-            if random.random() < 0.008:  # 0.8% chance of critical tilt event
-                base_tilt += np.random.uniform(45, 90)
+            light_exposure_lux = max(0, light_exposure_lux)
             
-            tilt_angle = base_tilt
-            
-            # Light exposure simulation
-            base_light = np.random.uniform(0, 80)  # Normal warehouse/truck lighting
-            
-            # Phase-specific light exposure
-            if current_phase == 'Pickup':
-                base_light += np.random.uniform(50, 200)  # Loading dock lighting
-            elif current_phase == 'Hub_Processing':
-                base_light += np.random.uniform(100, 300)  # Bright sorting facilities
-            elif current_phase == 'Last_Mile':
-                # Outdoor delivery lighting
-                hour = timestamp.hour
-                if 6 <= hour <= 18:  # Daylight
-                    base_light += np.random.uniform(200, 800)
-                else:  # Night delivery
-                    base_light += np.random.uniform(50, 150)
-            
-            # Unauthorized access attempts (tampering)
-            tampering_risk = {'Standard': 0.01, 'High': 0.005, 'Maximum': 0.002}[package_info['security']]
-            
-            if random.random() < tampering_risk:
-                # Tampering attempt detected
-                base_light += np.random.uniform(800, 2500)  # Flashlights, bright lights
-                base_tilt += np.random.uniform(20, 60)      # Forceful handling
-            
-            # High-value packages attract more attention
-            if package_info['value'] == 'Very High' and random.random() < 0.003:
-                base_light += np.random.uniform(500, 1500)
-                base_tilt += np.random.uniform(15, 45)
-            
-            light_exposure = base_light
-            
-            # Seal status simulation
+            # Seal status
             seal_status = 'intact'
             
-            # Seal failure rate based on package handling and security
-            base_seal_failure_rate = 0.001  # 0.1% base rate
-            
-            # Higher tilt increases seal failure risk
-            if tilt_angle > 30:
-                base_seal_failure_rate *= 2
+            # Seal failure probability increases with high tilt/light
+            failure_prob = 0.001  # Base 0.1%
             if tilt_angle > 45:
-                base_seal_failure_rate *= 3
+                failure_prob += 0.02
+            if light_exposure_lux > 1000:
+                failure_prob += 0.03
             
-            # High light exposure suggests tampering attempts
-            if light_exposure > 1000:
-                base_seal_failure_rate *= 5
-            
-            # Security level affects seal quality
-            security_seal_quality = {'Standard': 1.0, 'High': 0.5, 'Maximum': 0.2}
-            base_seal_failure_rate *= security_seal_quality[package_info['security']]
-            
-            # Transportation phase affects seal integrity
-            if current_phase == 'Hub_Processing':
-                base_seal_failure_rate *= 1.5  # More handling
-            
-            if random.random() < base_seal_failure_rate:
+            if random.random() < failure_prob:
                 seal_status = 'broken'
-            
-            # Once broken, seal stays broken
-            if i > 0:
-                prev_data = [d for d in data if d['package_id'] == package_id]
-                if prev_data and prev_data[-1]['seal_status'] == 'broken':
-                    seal_status = 'broken'
-            
-            # Environmental factors
-            temperature_effect = np.random.uniform(-5, 5)  # Temperature affects sensors
-            humidity_effect = np.random.uniform(-2, 2)     # Humidity affects sensors
-            
-            tilt_angle += temperature_effect * 0.1
-            light_exposure += humidity_effect * 2
-            
-            # Ensure realistic bounds
-            tilt_angle = max(0, tilt_angle)
-            light_exposure = max(0, light_exposure)
             
             data.append({
                 'timestamp': timestamp,
                 'package_id': package_id,
-                'package_type': package_info['type'],
-                'package_value': package_info['value'],
-                'security_level': package_info['security'],
-                'shipping_phase': current_phase,
                 'tilt_angle': round(tilt_angle, 1),
-                'light_exposure': round(light_exposure, 0),
-                'seal_status': seal_status,
-                'is_fragile': package_info['fragile']
+                'light_exposure_lux': round(light_exposure_lux, 0),
+                'seal_status': seal_status
             })
     
     return pd.DataFrame(data)
@@ -916,387 +618,848 @@ def generate_package_tampering_data():
 # ALERT CHECKING FUNCTIONS
 # =============================================================================
 
-def check_factory_alerts(df):
-    """Check factory sensor alerts"""
+def check_predictive_maintenance_alerts(df):
+    """Check for predictive maintenance alerts"""
     alerts = []
-    latest_data = df.groupby('Machine_ID').last().reset_index()
+    latest_data = df.groupby('machine_id').last().reset_index()
     
     for _, row in latest_data.iterrows():
-        machine = row['Machine_ID']
-        for sensor, threshold in THRESHOLD_LIMITS.items():
-            if row[sensor] > threshold:
-                alerts.append({
-                    'type': 'Factory',
-                    'machine': machine,
-                    'sensor': sensor,
-                    'value': row[sensor],
-                    'threshold': threshold,
-                    'unit': SENSOR_UNITS[sensor]
-                })
+        if row['vibration_rms'] > 12:
+            alerts.append({
+                'type': 'High Vibration',
+                'machine': row['machine_id'],
+                'value': row['vibration_rms'],
+                'threshold': 12,
+                'severity': 'Warning'
+            })
+        
+        if row['temperature_C'] > 80:
+            alerts.append({
+                'type': 'High Temperature',
+                'machine': row['machine_id'],
+                'value': row['temperature_C'],
+                'threshold': 80,
+                'severity': 'Critical'
+            })
+        
+        if row['failure_risk_score'] > 70:
+            alerts.append({
+                'type': 'High Failure Risk',
+                'machine': row['machine_id'],
+                'value': row['failure_risk_score'],
+                'threshold': 70,
+                'severity': 'Critical'
+            })
+    
+    return alerts
+
+def check_environment_alerts(df):
+    """Check for factory environment alerts"""
+    alerts = []
+    latest_data = df.groupby('zone_id').last().reset_index()
+    
+    for _, row in latest_data.iterrows():
+        if row['co2_ppm'] > 1500:
+            alerts.append({
+                'type': 'High CO2',
+                'zone': row['zone_id'],
+                'value': row['co2_ppm'],
+                'threshold': 1500,
+                'severity': 'Warning'
+            })
+        
+        if row['aqi'] > 100:
+            alerts.append({
+                'type': 'Poor Air Quality',
+                'zone': row['zone_id'],
+                'value': row['aqi'],
+                'threshold': 100,
+                'severity': 'Warning'
+            })
+        
+        if row['noise_db'] > 90:
+            alerts.append({
+                'type': 'High Noise',
+                'zone': row['zone_id'],
+                'value': row['noise_db'],
+                'threshold': 90,
+                'severity': 'Warning'
+            })
     
     return alerts
 
 def check_cold_chain_alerts(df):
-    """Check cold chain alerts"""
+    """Check for cold chain alerts"""
     alerts = []
     latest_data = df.groupby('shipment_id').last().reset_index()
     
     for _, row in latest_data.iterrows():
-        shipment = row['shipment_id']
+        target_temp = row['target_temp']
+        current_temp = row['cold_storage_temp']
         
-        # Temperature alert
-        if row['cold_storage_temp'] > 8:
+        # Temperature deviation alert
+        if abs(current_temp - target_temp) > 5:
             alerts.append({
-                'type': 'Cold Chain',
-                'shipment': shipment,
-                'issue': f"Temperature: {row['cold_storage_temp']}°C (>8°C)",
-                'severity': 'High'
-            })
-        
-        # Humidity alert  
-        if row['humidity'] > 75:
-            alerts.append({
-                'type': 'Cold Chain', 
-                'shipment': shipment,
-                'issue': f"Humidity: {row['humidity']}% (>75%)",
-                'severity': 'Medium'
-            })
-    
-    return alerts
-
-def check_warehouse_alerts(df):
-    """Check warehouse environmental alerts"""
-    alerts = []
-    latest_data = df.groupby('warehouse_id').last().reset_index()
-    
-    for _, row in latest_data.iterrows():
-        warehouse = row['warehouse_id']
-        
-        # CO2 alert
-        if row['co2_level_ppm'] > 1500:
-            alerts.append({
-                'type': 'Warehouse',
-                'warehouse': warehouse,
-                'issue': f"CO2: {row['co2_level_ppm']} ppm (>1500)",
-                'severity': 'High'
-            })
-        
-        # Air quality alert
-        if row['air_quality_index'] > 100:
-            alerts.append({
-                'type': 'Warehouse',
-                'warehouse': warehouse, 
-                'issue': f"AQI: {row['air_quality_index']} (>100)",
-                'severity': 'Medium'
+                'type': 'Temperature Deviation',
+                'shipment': row['shipment_id'],
+                'current': current_temp,
+                'target': target_temp,
+                'severity': 'Critical'
             })
     
     return alerts
 
 def check_inventory_alerts(df):
-    """Check inventory alerts"""
+    """Check for inventory alerts"""
     alerts = []
     latest_data = df.groupby('sku_id').last().reset_index()
     
-    low_stock_items = latest_data[latest_data['stock_level'] <= latest_data['reorder_threshold']]
+    low_stock = latest_data[latest_data['stock_level'] <= latest_data['reorder_point']]
     
-    for _, row in low_stock_items.iterrows():
+    for _, row in low_stock.iterrows():
         alerts.append({
-            'type': 'Inventory',
+            'type': 'Low Stock',
             'sku': row['sku_id'],
             'warehouse': row['warehouse_id'],
-            'issue': f"Low Stock: {row['stock_level']} units (threshold: {row['reorder_threshold']})",
-            'severity': 'Medium'
+            'stock_level': row['stock_level'],
+            'reorder_point': row['reorder_point'],
+            'severity': 'Warning'
         })
     
     return alerts
 
 def check_tampering_alerts(df):
-    """Check package tampering alerts"""
+    """Check for package tampering alerts"""
     alerts = []
     latest_data = df.groupby('package_id').last().reset_index()
     
     for _, row in latest_data.iterrows():
-        package = row['package_id']
-        
-        # Tilt alert
         if row['tilt_angle'] > 45:
             alerts.append({
-                'type': 'Tampering',
-                'package': package,
-                'issue': f"High Tilt: {row['tilt_angle']}° (>45°)",
-                'severity': 'High'
+                'type': 'High Tilt',
+                'package': row['package_id'],
+                'value': row['tilt_angle'],
+                'threshold': 45,
+                'severity': 'Warning'
             })
         
-        # Light exposure alert
-        if row['light_exposure'] > 1000:
+        if row['light_exposure_lux'] > 1000:
             alerts.append({
-                'type': 'Tampering',
-                'package': package,
-                'issue': f"Light Exposure: {row['light_exposure']} lux (>1000)",
-                'severity': 'High'
+                'type': 'High Light Exposure',
+                'package': row['package_id'],
+                'value': row['light_exposure_lux'],
+                'threshold': 1000,
+                'severity': 'Warning'
             })
         
-        # Seal broken alert
         if row['seal_status'] == 'broken':
             alerts.append({
-                'type': 'Tampering',
-                'package': package,
-                'issue': "Seal Status: Broken",
+                'type': 'Broken Seal',
+                'package': row['package_id'],
+                'status': 'broken',
                 'severity': 'Critical'
             })
     
     return alerts
 
 # =============================================================================
-# MAIN APPLICATION
+# MAIN DASHBOARD APPLICATION
 # =============================================================================
 
 def main():
-    # Title and header
-    st.title("🏭 Comprehensive IoT & Supply Chain Monitoring System")
-    st.markdown("Real-time monitoring dashboard for factory operations and supply chain logistics")
+    # Page header
+    st.title("🏭 Industrial IoT & Supply Chain Monitoring Dashboard")
+    st.markdown("Comprehensive monitoring system for factory operations and supply chain logistics")
     
-    # Demo data notice
-    with st.expander("📊 About Demo Data", expanded=False):
-        st.markdown("""
-        **Enhanced Realistic Demo Data Features:**
-        
-        🏭 **Factory IoT System:**
-        - 5 machines with unique profiles (age, efficiency, maintenance status)
-        - Realistic sensor patterns with daily/weekly cycles
-        - Equipment failures and maintenance downtime simulation
-        - Temperature correlations with power consumption and age
-        
-        🚛 **Cold Chain Monitoring:**
-        - 10 different shipment types (frozen, chilled, pharmaceuticals)
-        - Realistic temperature requirements (-20°C to +8°C)
-        - Route-based GPS tracking with waypoints
-        - Temperature excursions during door openings
-        - Equipment failure simulation for specific trucks
-        
-        🧯 **Warehouse Environmental:**
-        - 5 warehouses with different characteristics and HVAC systems
-        - Occupancy-based CO2 and temperature patterns
-        - Ventilation efficiency and maintenance issues
-        - Business hours and seasonal variations
-        
-        📦 **Inventory Management:**
-        - 30 products across 10 categories with realistic stock velocities
-        - Seasonal demand patterns (winter jackets, garden tools)
-        - Supply chain disruptions and stock adjustments
-        - Velocity-based consumption patterns (high/medium/low)
-        
-        📦 **Package Tampering:**
-        - 20 packages with different security levels and values
-        - Shipping phase tracking (pickup → transit → hub → delivery)
-        - Fragile item handling with lower tilt tolerance
-        - Security-based seal failure rates and tampering attempts
-        """)
+    # Sidebar configuration
+    st.sidebar.header("🔧 Dashboard Controls")
+    st.sidebar.markdown("---")
     
     # Load all data
-    factory_data = generate_factory_sensor_data()
-    cold_chain_data = generate_cold_chain_data()
-    warehouse_data = generate_warehouse_environmental_data()
-    inventory_data = generate_inventory_data()
-    tampering_data = generate_package_tampering_data()
+    with st.spinner("Loading data..."):
+        predictive_data = generate_predictive_maintenance_data()
+        machine_status_data = generate_machine_status_data()
+        environment_data = generate_factory_environment_data()
+        oee_data = generate_oee_data()
+        cold_chain_data = generate_cold_chain_data()
+        warehouse_env_data = generate_warehouse_environment_data()
+        inventory_data = generate_inventory_data()
+        tampering_data = generate_package_tamper_data()
     
     # Check all alerts
-    factory_alerts = check_factory_alerts(factory_data)
-    cold_chain_alerts = check_cold_chain_alerts(cold_chain_data)
-    warehouse_alerts = check_warehouse_alerts(warehouse_data)
-    inventory_alerts = check_inventory_alerts(inventory_data)
-    tampering_alerts = check_tampering_alerts(tampering_data)
-    
-    all_alerts = factory_alerts + cold_chain_alerts + warehouse_alerts + inventory_alerts + tampering_alerts
-    
-    # Sidebar
-    st.sidebar.header("🔧 System Controls")
+    pm_alerts = check_predictive_maintenance_alerts(predictive_data)
+    env_alerts = check_environment_alerts(environment_data)
+    cc_alerts = check_cold_chain_alerts(cold_chain_data)
+    inv_alerts = check_inventory_alerts(inventory_data)
+    tamper_alerts = check_tampering_alerts(tampering_data)
     
     # Alert summary in sidebar
     st.sidebar.subheader("🚨 Alert Summary")
+    total_alerts = len(pm_alerts) + len(env_alerts) + len(cc_alerts) + len(inv_alerts) + len(tamper_alerts)
     
-    alert_counts = {
-        'Factory': len(factory_alerts),
-        'Cold Chain': len(cold_chain_alerts),
-        'Warehouse': len(warehouse_alerts),
-        'Inventory': len(inventory_alerts),
-        'Tampering': len(tampering_alerts)
-    }
-    
-    for system, count in alert_counts.items():
-        if count > 0:
-            st.sidebar.error(f"**{system}**: {count} alerts")
-        else:
-            st.sidebar.success(f"**{system}**: No alerts")
-    
-    # Show recent critical alerts
-    critical_alerts = [a for a in all_alerts if a.get('severity') == 'Critical']
-    if critical_alerts:
-        st.sidebar.subheader("🔴 Critical Alerts")
-        for alert in critical_alerts[:3]:
-            st.sidebar.error(f"**{alert['type']}**: {alert['issue']}")
-    
-    # System selector
-    selected_system = st.sidebar.selectbox(
-        "Select Monitoring System:",
-        ["Factory IoT", "Cold Chain", "Warehouse Environment", "Inventory", "Package Tampering"]
-    )
+    if total_alerts > 0:
+        st.sidebar.error(f"**{total_alerts} Active Alerts**")
+        
+        alert_types = {
+            'Predictive Maintenance': len(pm_alerts),
+            'Environment': len(env_alerts),
+            'Cold Chain': len(cc_alerts),
+            'Inventory': len(inv_alerts),
+            'Tampering': len(tamper_alerts)
+        }
+        
+        for alert_type, count in alert_types.items():
+            if count > 0:
+                st.sidebar.warning(f"{alert_type}: {count}")
+    else:
+        st.sidebar.success("✅ No Active Alerts")
     
     # Create main tabs
-    if selected_system == "Factory IoT":
-        # Factory IoT tabs (original system)
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📈 Overview", 
-            "🧭 Real-Time Monitoring", 
-            "📊 Sensor Analytics", 
-            "🗺️ Factory Map", 
-            "📋 Data Table"
-        ])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "🔧 Predictive Maintenance",
+        "⚙️ Machine Status",
+        "🌡️ Factory Environment",
+        "📊 Production OEE",
+        "🚛 Cold Chain",
+        "🏪 Warehouse Environment",
+        "📦 Inventory Tracking",
+        "🔒 Package Security"
+    ])
+    
+    # Tab 1: Predictive Maintenance
+    with tab1:
+        st.header("🔧 Predictive Maintenance Dashboard")
         
-        # Add machine selector for factory system
-        selected_machine = st.sidebar.selectbox(
-            "Select Machine:",
-            ["All Machines"] + MACHINES
-        )
-        
-        # Sensor visibility checkboxes
-        st.sidebar.subheader("📊 Sensor Visibility")
-        sensor_visibility = {}
-        for sensor in SENSOR_RANGES.keys():
-            sensor_visibility[sensor] = st.sidebar.checkbox(
-                f"{sensor} ({SENSOR_UNITS[sensor]})",
-                value=True
+        # Filters
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_machine = st.selectbox(
+                "Select Machine:",
+                ["All Machines"] + MACHINES,
+                key="pm_machine"
+            )
+        with col2:
+            time_range = st.selectbox(
+                "Time Range:",
+                ["Last 24 Hours", "Last 3 Days", "Last 7 Days"],
+                index=2,
+                key="pm_time"
             )
         
-        # Factory Overview Tab
-        with tab1:
-            st.markdown("### 📊 Factory System Overview - Key Performance Indicators")
-            st.markdown("Average sensor readings across all machines for the past 7 days")
+        # Filter data
+        if time_range == "Last 24 Hours":
+            filtered_data = predictive_data[predictive_data['timestamp'] >= predictive_data['timestamp'].max() - timedelta(days=1)]
+        elif time_range == "Last 3 Days":
+            filtered_data = predictive_data[predictive_data['timestamp'] >= predictive_data['timestamp'].max() - timedelta(days=3)]
+        else:
+            filtered_data = predictive_data
+        
+        if selected_machine != "All Machines":
+            filtered_data = filtered_data[filtered_data['machine_id'] == selected_machine]
+        
+        # Alert banners
+        current_pm_alerts = [a for a in pm_alerts if selected_machine == "All Machines" or a['machine'] == selected_machine]
+        if current_pm_alerts:
+            st.error(f"🚨 {len(current_pm_alerts)} Predictive Maintenance Alerts")
+            for alert in current_pm_alerts[:3]:
+                if alert['severity'] == 'Critical':
+                    st.error(f"**{alert['machine']}**: {alert['type']} = {alert['value']} (threshold: {alert['threshold']})")
+                else:
+                    st.warning(f"**{alert['machine']}**: {alert['type']} = {alert['value']} (threshold: {alert['threshold']})")
+        
+        # KPIs
+        latest_data = filtered_data.groupby('machine_id').last().reset_index()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            avg_vibration = latest_data['vibration_rms'].mean()
+            st.metric("Avg Vibration", f"{avg_vibration:.1f} mm/s", delta=None)
+        
+        with col2:
+            avg_temp = latest_data['temperature_C'].mean()
+            st.metric("Avg Temperature", f"{avg_temp:.1f}°C", delta=None)
+        
+        with col3:
+            avg_risk = latest_data['failure_risk_score'].mean()
+            st.metric("Avg Failure Risk", f"{avg_risk:.1f}%", delta=None)
+        
+        with col4:
+            critical_machines = len(latest_data[latest_data['failure_risk_score'] > 70])
+            st.metric("Critical Machines", critical_machines, delta=None)
+        
+        # Charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Vibration trend
+            fig_vib = px.line(
+                filtered_data,
+                x='timestamp',
+                y='vibration_rms',
+                color='machine_id',
+                title='Vibration RMS Trend',
+                labels={'vibration_rms': 'Vibration (mm/s)'}
+            )
+            fig_vib.add_hline(y=12, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
+            st.plotly_chart(fig_vib, use_container_width=True)
+        
+        with col2:
+            # Temperature trend
+            fig_temp = px.line(
+                filtered_data,
+                x='timestamp',
+                y='temperature_C',
+                color='machine_id',
+                title='Temperature Trend',
+                labels={'temperature_C': 'Temperature (°C)'}
+            )
+            fig_temp.add_hline(y=80, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
+            st.plotly_chart(fig_temp, use_container_width=True)
+        
+        # Failure risk heatmap
+        if selected_machine == "All Machines":
+            latest_pivot = latest_data.pivot_table(
+                values='failure_risk_score',
+                index='machine_id',
+                aggfunc='mean'
+            ).reset_index()
             
-            # Calculate averages
-            avg_metrics = {}
-            for sensor in SENSOR_RANGES.keys():
-                avg_metrics[sensor] = factory_data[sensor].mean()
-            
-            avg_metrics['Machine_Uptime'] = factory_data.groupby(['Machine_ID', factory_data['Timestamp'].dt.date])['Machine_Uptime'].max().mean()
-            
-            # Display KPIs in columns
-            cols = st.columns(4)
-            
-            sensors_list = list(SENSOR_RANGES.keys()) + ['Machine_Uptime']
-            for i, sensor in enumerate(sensors_list):
-                col_idx = i % 4
-                with cols[col_idx]:
-                    unit = SENSOR_UNITS.get(sensor, 'hrs' if sensor == 'Machine_Uptime' else '')
-                    value = avg_metrics[sensor]
-                    
-                    # Color based on thresholds
-                    if sensor in THRESHOLD_LIMITS and value > THRESHOLD_LIMITS[sensor]:
-                        st.error(f"**{sensor}**\n\n{value:.1f} {unit}")
-                    elif sensor in THRESHOLD_LIMITS and value > THRESHOLD_LIMITS[sensor] * 0.8:
-                        st.warning(f"**{sensor}**\n\n{value:.1f} {unit}")
+            fig_risk = px.bar(
+                latest_pivot,
+                x='machine_id',
+                y='failure_risk_score',
+                title='Current Failure Risk Scores by Machine',
+                color='failure_risk_score',
+                color_continuous_scale='RdYlGn_r'
+            )
+            fig_risk.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Critical Threshold")
+            st.plotly_chart(fig_risk, use_container_width=True)
+        
+        # Machine health status table
+        st.subheader("Machine Health Status")
+        health_df = latest_data[['machine_id', 'vibration_rms', 'temperature_C', 'failure_risk_score', 'health_status']].copy()
+        health_df.columns = ['Machine', 'Vibration (mm/s)', 'Temperature (°C)', 'Failure Risk (%)', 'Status']
+        
+        # Color coding
+        def highlight_status(row):
+            colors = []
+            for col in row.index:
+                if col == 'Failure Risk (%)':
+                    if row[col] > 70:
+                        colors.append('background-color: #ffcccc')
+                    elif row[col] > 50:
+                        colors.append('background-color: #fff2cc')
                     else:
-                        st.success(f"**{sensor}**\n\n{value:.1f} {unit}")
-            
-            # Overall system health
-            st.markdown("### 🎯 Factory System Health")
-            factory_critical = len(factory_alerts)
-            if factory_critical == 0:
-                st.success("✅ All factory systems operating within normal parameters")
-            elif factory_critical <= 2:
-                st.warning(f"⚠️ {factory_critical} factory sensor(s) require attention")
-            else:
-                st.error(f"🚨 {factory_critical} critical factory alerts - immediate action required")
+                        colors.append('background-color: #ccffcc')
+                else:
+                    colors.append('')
+            return colors
         
-        # Add other factory tabs here (similar to original implementation)
-        with tab2:
-            st.markdown("### 🧭 Factory Real-Time Monitoring")
-            st.info("Factory real-time monitoring functionality would go here")
-        
-        with tab3:
-            st.markdown("### 📊 Factory Sensor Analytics")
-            st.info("Factory sensor analytics would go here")
-        
-        with tab4:
-            st.markdown("### 🗺️ Factory Floor Map")  
-            st.info("Factory floor map would go here")
-        
-        with tab5:
-            st.markdown("### 📋 Factory Data Table")
-            st.dataframe(factory_data.head(100), use_container_width=True)
+        st.dataframe(health_df.style.apply(highlight_status, axis=1), use_container_width=True)
     
-    elif selected_system == "Cold Chain":
-        # Cold Chain Monitoring
-        st.header("🚛 Cold Chain Monitoring System")
+    # Tab 2: Machine Status Monitoring
+    with tab2:
+        st.header("⚙️ Machine Status Monitoring")
+        
+        # Real-time toggle
+        real_time_enabled = st.checkbox("Enable Real-Time Updates", key="realtime")
+        
+        # Filters
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_machine_status = st.selectbox(
+                "Select Machine:",
+                ["All Machines"] + MACHINES,
+                key="status_machine"
+            )
+        with col2:
+            status_filter = st.selectbox(
+                "Filter by Status:",
+                ["All", "Running", "Stopped", "Maintenance", "Fault"],
+                key="status_filter"
+            )
+        
+        # Filter data
+        filtered_status = machine_status_data.copy()
+        if selected_machine_status != "All Machines":
+            filtered_status = filtered_status[filtered_status['machine_id'] == selected_machine_status]
+        if status_filter != "All":
+            filtered_status = filtered_status[filtered_status['status'] == status_filter]
+        
+        # Real-time simulation
+        if real_time_enabled:
+            placeholder = st.empty()
+            
+            for _ in range(5):  # 5 updates
+                # Generate new data point
+                current_time = datetime.now()
+                new_data = []
+                
+                for machine_id in (MACHINES if selected_machine_status == "All Machines" else [selected_machine_status]):
+                    # Simple real-time simulation
+                    if random.random() < 0.9:  # 90% chance running
+                        status = 'Running'
+                        rpm = np.random.uniform(1400, 1700)
+                        energy = np.random.uniform(18, 23)
+                    else:
+                        status = 'Stopped'
+                        rpm = 0
+                        energy = np.random.uniform(0.5, 2.0)
+                    
+                    new_data.append({
+                        'timestamp': current_time,
+                        'machine_id': machine_id,
+                        'rpm': round(rpm, 0),
+                        'energy_kWh': round(energy, 2),
+                        'status': status
+                    })
+                
+                new_df = pd.DataFrame(new_data)
+                
+                with placeholder.container():
+                    # Current status metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        running_count = len(new_df[new_df['status'] == 'Running'])
+                        st.metric("Running Machines", running_count)
+                    
+                    with col2:
+                        avg_rpm = new_df[new_df['status'] == 'Running']['rpm'].mean()
+                        st.metric("Avg RPM", f"{avg_rpm:.0f}" if not np.isnan(avg_rpm) else "0")
+                    
+                    with col3:
+                        total_energy = new_df['energy_kWh'].sum()
+                        st.metric("Total Energy", f"{total_energy:.1f} kWh")
+                    
+                    with col4:
+                        fault_count = len(new_df[new_df['status'] == 'Fault'])
+                        st.metric("Faults", fault_count)
+                    
+                    # Real-time chart
+                    fig_realtime = px.bar(
+                        new_df,
+                        x='machine_id',
+                        y='rpm',
+                        color='status',
+                        title=f'Real-Time Machine Status - {current_time.strftime("%H:%M:%S")}',
+                        color_discrete_map={
+                            'Running': 'green',
+                            'Stopped': 'red',
+                            'Maintenance': 'orange',
+                            'Fault': 'darkred'
+                        }
+                    )
+                    st.plotly_chart(fig_realtime, use_container_width=True)
+                
+                time.sleep(2)  # 2-second updates
+        
+        else:
+            # Static analysis
+            latest_status = filtered_status.groupby('machine_id').last().reset_index()
+            
+            # Status overview
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                running_count = len(latest_status[latest_status['status'] == 'Running'])
+                st.metric("Running Machines", running_count)
+            
+            with col2:
+                avg_rpm = latest_status[latest_status['status'] == 'Running']['rpm'].mean()
+                st.metric("Avg RPM", f"{avg_rpm:.0f}" if not np.isnan(avg_rpm) else "0")
+            
+            with col3:
+                total_energy = latest_status['energy_kWh'].sum()
+                st.metric("Total Energy", f"{total_energy:.1f} kWh")
+            
+            with col4:
+                fault_count = len(latest_status[latest_status['status'] == 'Fault'])
+                st.metric("Faults", fault_count)
+            
+            # Charts
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Status distribution
+                status_counts = latest_status['status'].value_counts()
+                fig_status = px.pie(
+                    values=status_counts.values,
+                    names=status_counts.index,
+                    title='Machine Status Distribution'
+                )
+                st.plotly_chart(fig_status, use_container_width=True)
+            
+            with col2:
+                # Energy consumption
+                fig_energy = px.bar(
+                    latest_status,
+                    x='machine_id',
+                    y='energy_kWh',
+                    color='status',
+                    title='Energy Consumption by Machine'
+                )
+                st.plotly_chart(fig_energy, use_container_width=True)
+            
+            # RPM trend over time
+            recent_data = filtered_status[filtered_status['timestamp'] >= filtered_status['timestamp'].max() - timedelta(hours=6)]
+            fig_rpm = px.line(
+                recent_data,
+                x='timestamp',
+                y='rpm',
+                color='machine_id',
+                title='RPM Trend (Last 6 Hours)'
+            )
+            st.plotly_chart(fig_rpm, use_container_width=True)
+    
+    # Tab 3: Factory Environment
+    with tab3:
+        st.header("🌡️ Factory Environment Monitoring")
+        
+        # Filters
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_zone = st.selectbox(
+                "Select Zone:",
+                ["All Zones"] + FACTORY_ZONES,
+                key="env_zone"
+            )
+        with col2:
+            env_metric = st.selectbox(
+                "Primary Metric:",
+                ["Temperature", "CO2", "Air Quality", "Noise"],
+                key="env_metric"
+            )
+        
+        # Filter data
+        filtered_env = environment_data.copy()
+        if selected_zone != "All Zones":
+            filtered_env = filtered_env[filtered_env['zone_id'] == selected_zone]
+        
+        # Alert banners
+        current_env_alerts = [a for a in env_alerts if selected_zone == "All Zones" or a['zone'] == selected_zone]
+        if current_env_alerts:
+            st.warning(f"⚠️ {len(current_env_alerts)} Environment Alerts")
+            for alert in current_env_alerts[:3]:
+                st.warning(f"**{alert['zone']}**: {alert['type']} = {alert['value']} (threshold: {alert['threshold']})")
+        
+        # Environmental KPIs
+        latest_env = filtered_env.groupby('zone_id').last().reset_index()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            avg_temp = latest_env['temperature_C'].mean()
+            st.metric("Avg Temperature", f"{avg_temp:.1f}°C")
+        
+        with col2:
+            avg_co2 = latest_env['co2_ppm'].mean()
+            co2_status = "🔴" if avg_co2 > 1500 else "🟡" if avg_co2 > 1000 else "🟢"
+            st.metric("Avg CO2", f"{avg_co2:.0f} ppm {co2_status}")
+        
+        with col3:
+            avg_aqi = latest_env['aqi'].mean()
+            aqi_status = "🔴" if avg_aqi > 100 else "🟡" if avg_aqi > 50 else "🟢"
+            st.metric("Avg AQI", f"{avg_aqi:.0f} {aqi_status}")
+        
+        with col4:
+            avg_noise = latest_env['noise_db'].mean()
+            noise_status = "🔴" if avg_noise > 90 else "🟡" if avg_noise > 75 else "🟢"
+            st.metric("Avg Noise", f"{avg_noise:.1f} dB {noise_status}")
+        
+        # Main environmental chart
+        metric_mapping = {
+            "Temperature": "temperature_C",
+            "CO2": "co2_ppm",
+            "Air Quality": "aqi",
+            "Noise": "noise_db"
+        }
+        
+        fig_env = px.line(
+            filtered_env,
+            x='timestamp',
+            y=metric_mapping[env_metric],
+            color='zone_id',
+            title=f'{env_metric} Levels Over Time'
+        )
+        
+        # Add threshold lines
+        if env_metric == "CO2":
+            fig_env.add_hline(y=1500, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
+        elif env_metric == "Air Quality":
+            fig_env.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Unhealthy Threshold")
+        elif env_metric == "Noise":
+            fig_env.add_hline(y=90, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
+        
+        st.plotly_chart(fig_env, use_container_width=True)
+        
+        # Environmental heatmap
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # CO2 vs AQI scatter
+            fig_scatter = px.scatter(
+                latest_env,
+                x='co2_ppm',
+                y='aqi',
+                color='zone_type',
+                size='temperature_C',
+                hover_data=['zone_id'],
+                title='CO2 vs Air Quality by Zone'
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        with col2:
+            # Zone comparison
+            fig_compare = px.bar(
+                latest_env,
+                x='zone_id',
+                y=metric_mapping[env_metric],
+                color='zone_type',
+                title=f'{env_metric} by Zone'
+            )
+            st.plotly_chart(fig_compare, use_container_width=True)
+        
+        # Environment status table
+        st.subheader("Zone Environmental Status")
+        env_table = latest_env[['zone_id', 'zone_type', 'temperature_C', 'co2_ppm', 'aqi', 'noise_db']].copy()
+        env_table.columns = ['Zone', 'Type', 'Temp (°C)', 'CO2 (ppm)', 'AQI', 'Noise (dB)']
+        
+        def highlight_env(row):
+            colors = []
+            for col in row.index:
+                if col == 'CO2 (ppm)' and row[col] > 1500:
+                    colors.append('background-color: #ffcccc')
+                elif col == 'AQI' and row[col] > 100:
+                    colors.append('background-color: #ffcccc')
+                elif col == 'Noise (dB)' and row[col] > 90:
+                    colors.append('background-color: #ffcccc')
+                else:
+                    colors.append('')
+            return colors
+        
+        st.dataframe(env_table.style.apply(highlight_env, axis=1), use_container_width=True)
+    
+    # Tab 4: Production OEE
+    with tab4:
+        st.header("📊 Production Line OEE Tracking")
+        
+        # Filters
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_line = st.selectbox(
+                "Select Production Line:",
+                ["All Lines"] + PRODUCTION_LINES,
+                key="oee_line"
+            )
+        with col2:
+            oee_period = st.selectbox(
+                "Time Period:",
+                ["Last 24 Hours", "Last 3 Days", "Last 7 Days"],
+                index=1,
+                key="oee_period"
+            )
+        
+        # Filter data
+        if oee_period == "Last 24 Hours":
+            filtered_oee = oee_data[oee_data['timestamp'] >= oee_data['timestamp'].max() - timedelta(days=1)]
+        elif oee_period == "Last 3 Days":
+            filtered_oee = oee_data[oee_data['timestamp'] >= oee_data['timestamp'].max() - timedelta(days=3)]
+        else:
+            filtered_oee = oee_data
+        
+        if selected_line != "All Lines":
+            filtered_oee = filtered_oee[filtered_oee['line_id'] == selected_line]
+        
+        # OEE KPIs
+        latest_oee = filtered_oee.groupby('line_id').last().reset_index()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            avg_oee = latest_oee['oee_percent'].mean()
+            oee_color = "🟢" if avg_oee > 80 else "🟡" if avg_oee > 60 else "🔴"
+            st.metric("Overall OEE", f"{avg_oee:.1f}% {oee_color}")
+        
+        with col2:
+            avg_availability = latest_oee['availability_percent'].mean()
+            st.metric("Avg Availability", f"{avg_availability:.1f}%")
+        
+        with col3:
+            avg_performance = latest_oee['performance_percent'].mean()
+            st.metric("Avg Performance", f"{avg_performance:.1f}%")
+        
+        with col4:
+            avg_quality = latest_oee['quality_percent'].mean()
+            st.metric("Avg Quality", f"{avg_quality:.1f}%")
+        
+        # OEE trend chart
+        fig_oee_trend = px.line(
+            filtered_oee,
+            x='timestamp',
+            y='oee_percent',
+            color='line_id',
+            title='OEE Trend Over Time',
+            labels={'oee_percent': 'OEE (%)'}
+        )
+        fig_oee_trend.add_hline(y=80, line_dash="dash", line_color="green", annotation_text="World Class (80%)")
+        fig_oee_trend.add_hline(y=60, line_dash="dash", line_color="orange", annotation_text="Acceptable (60%)")
+        st.plotly_chart(fig_oee_trend, use_container_width=True)
+        
+        # OEE components breakdown
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # OEE components by line
+            oee_components = latest_oee.melt(
+                id_vars=['line_id', 'product_type'],
+                value_vars=['availability_percent', 'performance_percent', 'quality_percent'],
+                var_name='component',
+                value_name='percentage'
+            )
+            
+            fig_components = px.bar(
+                oee_components,
+                x='line_id',
+                y='percentage',
+                color='component',
+                title='OEE Components by Production Line',
+                barmode='group'
+            )
+            st.plotly_chart(fig_components, use_container_width=True)
+        
+        with col2:
+            # Current OEE status
+            fig_current_oee = px.bar(
+                latest_oee,
+                x='line_id',
+                y='oee_percent',
+                color='product_type',
+                title='Current OEE by Production Line'
+            )
+            fig_current_oee.add_hline(y=80, line_dash="dash", line_color="green")
+            st.plotly_chart(fig_current_oee, use_container_width=True)
+        
+        # Production efficiency table
+        st.subheader("Production Line Performance Summary")
+        performance_table = latest_oee[['line_id', 'product_type', 'availability_percent', 'performance_percent', 'quality_percent', 'oee_percent']].copy()
+        performance_table.columns = ['Line', 'Product', 'Availability (%)', 'Performance (%)', 'Quality (%)', 'OEE (%)']
+        
+        def highlight_oee(row):
+            colors = []
+            for col in row.index:
+                if col == 'OEE (%)':
+                    if row[col] >= 80:
+                        colors.append('background-color: #ccffcc')
+                    elif row[col] >= 60:
+                        colors.append('background-color: #fff2cc')
+                    else:
+                        colors.append('background-color: #ffcccc')
+                else:
+                    colors.append('')
+            return colors
+        
+        st.dataframe(performance_table.style.apply(highlight_oee, axis=1), use_container_width=True)
+    
+    # Tab 5: Cold Chain Monitoring
+    with tab5:
+        st.header("🚛 Cold Chain Monitoring")
         
         # Filters
         col1, col2 = st.columns(2)
         with col1:
             selected_shipment = st.selectbox(
-                "Filter by Shipment:",
-                ["All Shipments"] + sorted(cold_chain_data['shipment_id'].unique().tolist())
+                "Select Shipment:",
+                ["All Shipments"] + [s for s in cold_chain_data['shipment_id'].unique()],
+                key="cc_shipment"
             )
         with col2:
             selected_truck = st.selectbox(
-                "Filter by Truck:",
-                ["All Trucks"] + sorted(cold_chain_data['truck_id'].unique().tolist())
+                "Select Truck:",
+                ["All Trucks"] + [t for t in cold_chain_data['truck_id'].unique()],
+                key="cc_truck"
             )
         
         # Filter data
-        filtered_cold_chain = cold_chain_data.copy()
+        filtered_cc = cold_chain_data.copy()
         if selected_shipment != "All Shipments":
-            filtered_cold_chain = filtered_cold_chain[filtered_cold_chain['shipment_id'] == selected_shipment]
+            filtered_cc = filtered_cc[filtered_cc['shipment_id'] == selected_shipment]
         if selected_truck != "All Trucks":
-            filtered_cold_chain = filtered_cold_chain[filtered_cold_chain['truck_id'] == selected_truck]
+            filtered_cc = filtered_cc[filtered_cc['truck_id'] == selected_truck]
         
-        # Alert banners
-        cold_alerts_current = check_cold_chain_alerts(filtered_cold_chain)
-        if cold_alerts_current:
-            st.warning(f"🚨 {len(cold_alerts_current)} Cold Chain Alerts Active")
-            for alert in cold_alerts_current[:3]:
-                st.error(f"**{alert['shipment']}**: {alert['issue']}")
+        # Cold chain alerts
+        current_cc_alerts = [a for a in cc_alerts 
+                           if (selected_shipment == "All Shipments" or a['shipment'] == selected_shipment)]
+        if current_cc_alerts:
+            st.error(f"🚨 {len(current_cc_alerts)} Cold Chain Temperature Alerts")
+            for alert in current_cc_alerts[:3]:
+                st.error(f"**{alert['shipment']}**: Current temp {alert['current']}°C (Target: {alert['target']}°C)")
         
-        # Temperature and Humidity Charts
+        # Cold chain KPIs
+        latest_cc = filtered_cc.groupby('shipment_id').last().reset_index()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            total_shipments = len(latest_cc)
+            st.metric("Active Shipments", total_shipments)
+        
+        with col2:
+            avg_temp = latest_cc['cold_storage_temp'].mean()
+            st.metric("Avg Temperature", f"{avg_temp:.1f}°C")
+        
+        with col3:
+            temp_violations = len([a for a in cc_alerts])
+            st.metric("Temp Violations", temp_violations)
+        
+        with col4:
+            door_open_count = len(latest_cc[latest_cc['door_status'] == 'open'])
+            st.metric("Doors Open", door_open_count)
+        
+        # Temperature monitoring
         col1, col2 = st.columns(2)
         
         with col1:
-            fig_temp = px.line(
-                filtered_cold_chain,
+            fig_temp_cc = px.line(
+                filtered_cc,
                 x='timestamp',
                 y='cold_storage_temp',
                 color='shipment_id',
-                title='Cold Storage Temperature Over Time',
+                title='Cold Storage Temperature Monitoring',
                 labels={'cold_storage_temp': 'Temperature (°C)'}
             )
-            fig_temp.add_hline(y=8, line_dash="dash", line_color="red", annotation_text="Max Temp Threshold (8°C)")
-            st.plotly_chart(fig_temp, use_container_width=True)
+            # Add target temperature lines for each shipment
+            for shipment in filtered_cc['shipment_id'].unique():
+                target_temp = filtered_cc[filtered_cc['shipment_id'] == shipment]['target_temp'].iloc[0]
+                fig_temp_cc.add_hline(
+                    y=target_temp,
+                    line_dash="dot",
+                    line_color="blue",
+                    opacity=0.7,
+                    annotation_text=f"Target: {target_temp}°C"
+                )
+            st.plotly_chart(fig_temp_cc, use_container_width=True)
         
         with col2:
-            fig_humidity = px.line(
-                filtered_cold_chain,
-                x='timestamp', 
+            fig_humidity_cc = px.line(
+                filtered_cc,
+                x='timestamp',
                 y='humidity',
                 color='shipment_id',
-                title='Humidity Levels Over Time',
+                title='Humidity Monitoring',
                 labels={'humidity': 'Humidity (%)'}
             )
-            fig_humidity.add_hline(y=75, line_dash="dash", line_color="red", annotation_text="Max Humidity Threshold (75%)")
-            st.plotly_chart(fig_humidity, use_container_width=True)
+            st.plotly_chart(fig_humidity_cc, use_container_width=True)
         
-        # GPS Tracking Map
-        st.markdown("### 🗺️ Real-Time GPS Tracking")
-        
-        # Get latest positions for each shipment
-        latest_positions = filtered_cold_chain.groupby('shipment_id').last().reset_index()
+        # GPS tracking map
+        st.subheader("🗺️ Real-Time GPS Tracking")
+        latest_positions = filtered_cc.groupby('shipment_id').last().reset_index()
         
         if not latest_positions.empty:
             fig_map = px.scatter_mapbox(
                 latest_positions,
-                lat='latitude',
-                lon='longitude',
+                lat='gps_lat',
+                lon='gps_lon',
                 color='cold_storage_temp',
                 size='humidity',
-                hover_data=['shipment_id', 'truck_id', 'door_status'],
+                hover_data=['shipment_id', 'truck_id', 'cargo_type', 'door_status'],
                 title='Current Shipment Locations',
                 mapbox_style='open-street-map',
                 height=500,
@@ -1305,365 +1468,385 @@ def main():
             fig_map.update_layout(margin={"r":0,"t":30,"l":0,"b":0})
             st.plotly_chart(fig_map, use_container_width=True)
         
-        # Door Opening Events Table
-        st.markdown("### 🚪 Recent Door Opening Events")
-        door_events = filtered_cold_chain[filtered_cold_chain['door_status'] == 'open'].sort_values('timestamp', ascending=False)
+        # Shipment status table
+        st.subheader("Shipment Status Overview")
+        shipment_table = latest_positions[['shipment_id', 'truck_id', 'cargo_type', 'cold_storage_temp', 'target_temp', 'humidity', 'door_status']].copy()
+        shipment_table.columns = ['Shipment', 'Truck', 'Cargo', 'Current Temp (°C)', 'Target Temp (°C)', 'Humidity (%)', 'Door Status']
         
-        if not door_events.empty:
-            st.dataframe(
-                door_events[['timestamp', 'shipment_id', 'truck_id', 'cold_storage_temp', 'door_status']].head(20),
-                use_container_width=True
-            )
-        else:
-            st.info("No recent door opening events recorded")
+        def highlight_temp(row):
+            colors = []
+            for col in row.index:
+                if col == 'Current Temp (°C)':
+                    current = row[col]
+                    target = row['Target Temp (°C)']
+                    if abs(current - target) > 5:
+                        colors.append('background-color: #ffcccc')
+                    elif abs(current - target) > 3:
+                        colors.append('background-color: #fff2cc')
+                    else:
+                        colors.append('background-color: #ccffcc')
+                elif col == 'Door Status' and row[col] == 'open':
+                    colors.append('background-color: #fff2cc')
+                else:
+                    colors.append('')
+            return colors
+        
+        st.dataframe(shipment_table.style.apply(highlight_temp, axis=1), use_container_width=True)
     
-    elif selected_system == "Warehouse Environment":
-        # Warehouse Environmental Monitoring
-        st.header("🧯 Warehouse Environmental Monitoring")
+    # Tab 6: Warehouse Environment
+    with tab6:
+        st.header("🏪 Warehouse Environment Monitoring")
         
         # Filters
-        selected_warehouse = st.sidebar.selectbox(
-            "Filter by Warehouse:",
-            ["All Warehouses"] + WAREHOUSES
+        selected_warehouse = st.selectbox(
+            "Select Warehouse:",
+            ["All Warehouses"] + WAREHOUSES,
+            key="wh_env"
         )
         
         # Filter data
-        filtered_warehouse = warehouse_data.copy()
+        filtered_wh = warehouse_env_data.copy()
         if selected_warehouse != "All Warehouses":
-            filtered_warehouse = filtered_warehouse[filtered_warehouse['warehouse_id'] == selected_warehouse]
+            filtered_wh = filtered_wh[filtered_wh['warehouse_id'] == selected_warehouse]
         
-        # Alert banners
-        warehouse_alerts_current = check_warehouse_alerts(filtered_warehouse)
-        if warehouse_alerts_current:
-            st.warning(f"🚨 {len(warehouse_alerts_current)} Warehouse Environmental Alerts")
-            for alert in warehouse_alerts_current:
-                if alert['severity'] == 'High':
-                    st.error(f"**{alert['warehouse']}**: {alert['issue']}")
-                else:
-                    st.warning(f"**{alert['warehouse']}**: {alert['issue']}")
+        # Warehouse KPIs
+        latest_wh = filtered_wh.groupby('warehouse_id').last().reset_index()
         
-        # Environmental metrics
         col1, col2, col3, col4 = st.columns(4)
-        
-        latest_warehouse_data = filtered_warehouse.groupby('warehouse_id').last().reset_index()
-        
         with col1:
-            avg_co2 = latest_warehouse_data['co2_level_ppm'].mean()
-            if avg_co2 > 1500:
-                st.error(f"**CO2 Level**\n\n{avg_co2:.0f} ppm")
-            else:
-                st.success(f"**CO2 Level**\n\n{avg_co2:.0f} ppm")
+            avg_temp_wh = latest_wh['temp'].mean()
+            st.metric("Avg Temperature", f"{avg_temp_wh:.1f}°C")
         
         with col2:
-            avg_temp = latest_warehouse_data['temp_warehouse'].mean()
-            st.info(f"**Temperature**\n\n{avg_temp:.1f} °C")
+            avg_humidity_wh = latest_wh['humidity'].mean()
+            st.metric("Avg Humidity", f"{avg_humidity_wh:.1f}%")
         
         with col3:
-            avg_humidity = latest_warehouse_data['humidity'].mean()
-            st.info(f"**Humidity**\n\n{avg_humidity:.1f} %")
+            avg_co2_wh = latest_wh['co2'].mean()
+            co2_status_wh = "🔴" if avg_co2_wh > 1500 else "🟡" if avg_co2_wh > 1000 else "🟢"
+            st.metric("Avg CO2", f"{avg_co2_wh:.0f} ppm {co2_status_wh}")
         
         with col4:
-            avg_aqi = latest_warehouse_data['air_quality_index'].mean()
-            if avg_aqi > 100:
-                st.error(f"**Air Quality**\n\n{avg_aqi:.0f} AQI")
-            else:
-                st.success(f"**Air Quality**\n\n{avg_aqi:.0f} AQI")
+            avg_aqi_wh = latest_wh['aqi'].mean()
+            aqi_status_wh = "🔴" if avg_aqi_wh > 100 else "🟡" if avg_aqi_wh > 50 else "🟢"
+            st.metric("Avg AQI", f"{avg_aqi_wh:.0f} {aqi_status_wh}")
         
-        # Environmental Charts
+        # Warehouse environment charts
         col1, col2 = st.columns(2)
         
         with col1:
-            fig_co2 = px.line(
-                filtered_warehouse,
+            fig_temp_wh = px.line(
+                filtered_wh,
                 x='timestamp',
-                y='co2_level_ppm', 
+                y='temp',
                 color='warehouse_id',
-                title='CO2 Levels Over Time',
-                labels={'co2_level_ppm': 'CO2 (ppm)'}
+                title='Warehouse Temperature',
+                labels={'temp': 'Temperature (°C)'}
             )
-            fig_co2.add_hline(y=1500, line_dash="dash", line_color="red", annotation_text="CO2 Alert Threshold")
-            st.plotly_chart(fig_co2, use_container_width=True)
+            st.plotly_chart(fig_temp_wh, use_container_width=True)
         
         with col2:
-            fig_aqi = px.area(
-                filtered_warehouse,
+            fig_co2_wh = px.line(
+                filtered_wh,
                 x='timestamp',
-                y='air_quality_index',
+                y='co2',
                 color='warehouse_id',
-                title='Air Quality Index Over Time',
-                labels={'air_quality_index': 'AQI'}
+                title='Warehouse CO2 Levels',
+                labels={'co2': 'CO2 (ppm)'}
             )
-            fig_aqi.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Unhealthy AQI Threshold")
-            st.plotly_chart(fig_aqi, use_container_width=True)
+            fig_co2_wh.add_hline(y=1500, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
+            st.plotly_chart(fig_co2_wh, use_container_width=True)
         
-        # Temperature and Humidity Chart
-        fig_temp_hum = make_subplots(
-            rows=2, cols=1,
-            subplot_titles=['Warehouse Temperature', 'Warehouse Humidity'],
-            vertical_spacing=0.1
+        # Combined environmental metrics
+        fig_combined = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=['Temperature', 'Humidity', 'CO2', 'AQI'],
+            vertical_spacing=0.1,
+            horizontal_spacing=0.1
         )
         
-        for warehouse in filtered_warehouse['warehouse_id'].unique():
-            wh_data = filtered_warehouse[filtered_warehouse['warehouse_id'] == warehouse]
+        for warehouse in latest_wh['warehouse_id'].unique():
+            wh_data = filtered_wh[filtered_wh['warehouse_id'] == warehouse]
             
-            fig_temp_hum.add_trace(
-                go.Scatter(
-                    x=wh_data['timestamp'],
-                    y=wh_data['temp_warehouse'],
-                    mode='lines',
-                    name=f'{warehouse} - Temp',
-                    showlegend=True
-                ),
+            fig_combined.add_trace(
+                go.Scatter(x=wh_data['timestamp'], y=wh_data['temp'], name=f'{warehouse} - Temp', showlegend=False),
                 row=1, col=1
             )
-            
-            fig_temp_hum.add_trace(
-                go.Scatter(
-                    x=wh_data['timestamp'],
-                    y=wh_data['humidity'],
-                    mode='lines',
-                    name=f'{warehouse} - Humidity',
-                    showlegend=True
-                ),
+            fig_combined.add_trace(
+                go.Scatter(x=wh_data['timestamp'], y=wh_data['humidity'], name=f'{warehouse} - Humidity', showlegend=False),
+                row=1, col=2
+            )
+            fig_combined.add_trace(
+                go.Scatter(x=wh_data['timestamp'], y=wh_data['co2'], name=f'{warehouse} - CO2', showlegend=False),
                 row=2, col=1
             )
+            fig_combined.add_trace(
+                go.Scatter(x=wh_data['timestamp'], y=wh_data['aqi'], name=f'{warehouse} - AQI', showlegend=False),
+                row=2, col=2
+            )
         
-        fig_temp_hum.update_layout(height=500, title_text="Temperature and Humidity Monitoring")
-        fig_temp_hum.update_yaxes(title_text="Temperature (°C)", row=1, col=1)
-        fig_temp_hum.update_yaxes(title_text="Humidity (%)", row=2, col=1)
-        
-        st.plotly_chart(fig_temp_hum, use_container_width=True)
+        fig_combined.update_layout(height=600, title_text="Warehouse Environmental Monitoring")
+        st.plotly_chart(fig_combined, use_container_width=True)
     
-    elif selected_system == "Inventory":
-        # Inventory Monitoring
-        st.header("📦 Inventory Monitoring System")
+    # Tab 7: Inventory Tracking
+    with tab7:
+        st.header("📦 Inventory Level Tracking")
         
         # Filters
         col1, col2 = st.columns(2)
         with col1:
             selected_sku = st.selectbox(
-                "Filter by SKU:",
-                ["All SKUs"] + sorted(inventory_data['sku_id'].unique().tolist())
+                "Select SKU:",
+                ["All SKUs"] + [s for s in inventory_data['sku_id'].unique()],
+                key="inv_sku"
             )
         with col2:
-            selected_inv_warehouse = st.selectbox(
-                "Filter by Warehouse:",
+            selected_warehouse_inv = st.selectbox(
+                "Select Warehouse:",
                 ["All Warehouses"] + WAREHOUSES,
                 key="inv_warehouse"
             )
         
-        show_restock_schedule = st.checkbox("Show Restocking Schedule", value=True)
-        
         # Filter data
-        filtered_inventory = inventory_data.copy()
+        filtered_inv = inventory_data.copy()
         if selected_sku != "All SKUs":
-            filtered_inventory = filtered_inventory[filtered_inventory['sku_id'] == selected_sku]
-        if selected_inv_warehouse != "All Warehouses":
-            filtered_inventory = filtered_inventory[filtered_inventory['warehouse_id'] == selected_inv_warehouse]
+            filtered_inv = filtered_inv[filtered_inv['sku_id'] == selected_sku]
+        if selected_warehouse_inv != "All Warehouses":
+            filtered_inv = filtered_inv[filtered_inv['warehouse_id'] == selected_warehouse_inv]
         
-        # Get latest inventory levels
-        latest_inventory = filtered_inventory.groupby('sku_id').last().reset_index()
+        # Inventory alerts
+        current_inv_alerts = [a for a in inv_alerts 
+                            if (selected_sku == "All SKUs" or a['sku'] == selected_sku) and
+                               (selected_warehouse_inv == "All Warehouses" or a['warehouse'] == selected_warehouse_inv)]
+        if current_inv_alerts:
+            st.warning(f"⚠️ {len(current_inv_alerts)} Low Stock Alerts")
+            for alert in current_inv_alerts[:5]:
+                st.warning(f"**{alert['sku']}** at {alert['warehouse']}: {alert['stock_level']} units (reorder at {alert['reorder_point']})")
         
-        # Alert banners
-        inventory_alerts_current = [a for a in inventory_alerts if a['sku'] in latest_inventory['sku_id'].values]
-        if inventory_alerts_current:
-            st.warning(f"🚨 {len(inventory_alerts_current)} Low Stock Alerts")
-            
-            low_stock_df = pd.DataFrame([
-                {
-                    'SKU': alert['sku'],
-                    'Warehouse': alert['warehouse'],
-                    'Current Stock': alert['issue'].split(':')[1].split('units')[0].strip(),
-                    'Status': 'LOW STOCK'
-                }
-                for alert in inventory_alerts_current[:10]
-            ])
-            st.dataframe(low_stock_df, use_container_width=True)
+        # Inventory KPIs
+        latest_inv = filtered_inv.groupby('sku_id').last().reset_index()
         
-        # Inventory Metrics
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            total_skus = len(latest_inventory)
+            total_skus = len(latest_inv)
             st.metric("Total SKUs", total_skus)
         
         with col2:
-            low_stock_count = len([a for a in inventory_alerts_current])
-            st.metric("Low Stock Items", low_stock_count)
+            total_stock = latest_inv['stock_level'].sum()
+            st.metric("Total Stock", f"{total_stock:.0f} units")
         
         with col3:
-            avg_stock = latest_inventory['stock_level'].mean()
-            st.metric("Avg Stock Level", f"{avg_stock:.0f}")
+            low_stock_count = len(latest_inv[latest_inv['stock_level'] <= latest_inv['reorder_point']])
+            st.metric("Low Stock Items", low_stock_count)
         
         with col4:
-            restock_needed = latest_inventory['restock_scheduled'].sum()
+            restock_needed = len(latest_inv[latest_inv['restock_eta'].notna()])
             st.metric("Restock Scheduled", restock_needed)
         
-        # Stock Level vs Reorder Threshold Chart
-        if not latest_inventory.empty:
-            fig_stock = px.bar(
-                latest_inventory.head(20),
-                x='sku_id',
-                y=['stock_level', 'reorder_threshold'],
-                title='Stock Levels vs Reorder Thresholds (Top 20 SKUs)',
-                labels={'value': 'Units', 'variable': 'Metric'}
-            )
-            fig_stock.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig_stock, use_container_width=True)
-        
-        # Stock Movement Over Time
+        # Inventory charts
         if selected_sku != "All SKUs":
-            sku_data = filtered_inventory[filtered_inventory['sku_id'] == selected_sku]
+            # Individual SKU tracking
+            sku_data = filtered_inv[filtered_inv['sku_id'] == selected_sku]
             
-            fig_movement = px.line(
+            fig_stock_trend = px.line(
                 sku_data,
                 x='timestamp',
                 y='stock_level',
-                title=f'Stock Movement Over Time - {selected_sku}',
-                labels={'stock_level': 'Stock Level (Units)'}
+                title=f'Stock Level Trend - {selected_sku}',
+                labels={'stock_level': 'Stock Level (units)'}
             )
             
-            # Add reorder threshold line
-            threshold = sku_data['reorder_threshold'].iloc[0]
-            fig_movement.add_hline(
-                y=threshold,
+            # Add reorder point line
+            reorder_point = sku_data['reorder_point'].iloc[0]
+            fig_stock_trend.add_hline(
+                y=reorder_point,
                 line_dash="dash",
                 line_color="red",
-                annotation_text=f"Reorder Threshold ({threshold})"
+                annotation_text=f"Reorder Point ({reorder_point})"
             )
-            
-            st.plotly_chart(fig_movement, use_container_width=True)
+            st.plotly_chart(fig_stock_trend, use_container_width=True)
         
-        # Restocking Schedule
-        if show_restock_schedule:
-            st.markdown("### 📅 Restocking Schedule")
-            restock_items = latest_inventory[latest_inventory['restock_scheduled'] == True]
+        else:
+            # Multi-SKU comparison
+            col1, col2 = st.columns(2)
             
-            if not restock_items.empty:
-                restock_display = restock_items[['sku_id', 'warehouse_id', 'stock_level', 'reorder_threshold']].copy()
-                restock_display.columns = ['SKU', 'Warehouse', 'Current Stock', 'Reorder Threshold']
-                st.dataframe(restock_display, use_container_width=True)
-            else:
-                st.info("No items currently scheduled for restocking")
+            with col1:
+                # Current stock levels
+                fig_current_stock = px.bar(
+                    latest_inv.head(15),  # Show top 15
+                    x='sku_id',
+                    y='stock_level',
+                    title='Current Stock Levels (Top 15 SKUs)',
+                    labels={'stock_level': 'Stock Level (units)'}
+                )
+                fig_current_stock.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_current_stock, use_container_width=True)
+            
+            with col2:
+                # Stock vs reorder point
+                comparison_data = latest_inv.head(15).copy()
+                comparison_data['reorder_gap'] = comparison_data['stock_level'] - comparison_data['reorder_point']
+                
+                fig_reorder_gap = px.bar(
+                    comparison_data,
+                    x='sku_id',
+                    y='reorder_gap',
+                    color='reorder_gap',
+                    title='Stock vs Reorder Point Gap',
+                    labels={'reorder_gap': 'Units Above/Below Reorder Point'},
+                    color_continuous_scale='RdYlGn'
+                )
+                fig_reorder_gap.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_reorder_gap, use_container_width=True)
+        
+        # Low stock items
+        st.subheader("Low Stock Items Requiring Attention")
+        low_stock_items = latest_inv[latest_inv['stock_level'] <= latest_inv['reorder_point']]
+        
+        if not low_stock_items.empty:
+            low_stock_display = low_stock_items[['sku_id', 'warehouse_id', 'stock_level', 'reorder_point', 'restock_eta']].copy()
+            low_stock_display.columns = ['SKU', 'Warehouse', 'Current Stock', 'Reorder Point', 'Restock ETA (hrs)']
+            st.dataframe(low_stock_display, use_container_width=True)
+        else:
+            st.success("✅ All items are above reorder points")
     
-    elif selected_system == "Package Tampering":
-        # Package Tampering Detection
-        st.header("📦 Package Tampering Detection System")
+    # Tab 8: Package Security
+    with tab8:
+        st.header("🔒 Package Tampering Detection")
         
         # Filters
-        selected_package = st.sidebar.selectbox(
-            "Filter by Package:",
-            ["All Packages"] + sorted(tampering_data['package_id'].unique().tolist()[:20])  # Show first 20 for performance
-        )
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_package = st.selectbox(
+                "Select Package:",
+                ["All Packages"] + PACKAGES[:20],  # Show first 20 for performance
+                key="tamper_package"
+            )
+        with col2:
+            tamper_period = st.selectbox(
+                "Time Period:",
+                ["Last 24 Hours", "Last 3 Days", "Last 7 Days"],
+                index=1,
+                key="tamper_period"
+            )
         
         # Filter data
-        filtered_tampering = tampering_data.copy()
+        if tamper_period == "Last 24 Hours":
+            filtered_tamper = tampering_data[tampering_data['timestamp'] >= tampering_data['timestamp'].max() - timedelta(days=1)]
+        elif tamper_period == "Last 3 Days":
+            filtered_tamper = tampering_data[tampering_data['timestamp'] >= tampering_data['timestamp'].max() - timedelta(days=3)]
+        else:
+            filtered_tamper = tampering_data
+        
         if selected_package != "All Packages":
-            filtered_tampering = filtered_tampering[filtered_tampering['package_id'] == selected_package]
+            filtered_tamper = filtered_tamper[filtered_tamper['package_id'] == selected_package]
         
-        # Get latest tampering data
-        latest_tampering = filtered_tampering.groupby('package_id').last().reset_index()
+        # Tampering alerts
+        current_tamper_alerts = [a for a in tamper_alerts 
+                               if selected_package == "All Packages" or a['package'] == selected_package]
+        if current_tamper_alerts:
+            st.error(f"🚨 {len(current_tamper_alerts)} Package Security Alerts")
+            for alert in current_tamper_alerts[:5]:
+                if alert['type'] == 'Broken Seal':
+                    st.error(f"**{alert['package']}**: {alert['type']} - Status: {alert['status']}")
+                else:
+                    st.warning(f"**{alert['package']}**: {alert['type']} = {alert['value']} (threshold: {alert['threshold']})")
         
-        # Alert banners
-        tampering_alerts_current = check_tampering_alerts(filtered_tampering)
-        if tampering_alerts_current:
-            st.error(f"🚨 {len(tampering_alerts_current)} Package Tampering Alerts!")
-            
-            for alert in tampering_alerts_current[:5]:
-                severity_color = "error" if alert['severity'] == 'Critical' else "warning"
-                getattr(st, severity_color)(f"**{alert['package']}**: {alert['issue']}")
+        # Security KPIs
+        latest_tamper = filtered_tamper.groupby('package_id').last().reset_index()
         
-        # Tampering Metrics
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            total_packages = len(latest_tampering)
-            st.metric("Total Packages", total_packages)
+            total_packages = len(latest_tamper)
+            st.metric("Monitored Packages", total_packages)
         
         with col2:
-            high_tilt = len(latest_tampering[latest_tampering['tilt_angle'] > 45])
-            st.metric("High Tilt Alerts", high_tilt)
+            high_tilt_count = len(latest_tamper[latest_tamper['tilt_angle'] > 45])
+            st.metric("High Tilt Alerts", high_tilt_count)
         
         with col3:
-            high_light = len(latest_tampering[latest_tampering['light_exposure'] > 1000])
-            st.metric("Light Exposure Alerts", high_light)
+            high_light_count = len(latest_tamper[latest_tamper['light_exposure_lux'] > 1000])
+            st.metric("Light Exposure Alerts", high_light_count)
         
         with col4:
-            broken_seals = len(latest_tampering[latest_tampering['seal_status'] == 'broken'])
-            st.metric("Broken Seals", broken_seals)
+            broken_seal_count = len(latest_tamper[latest_tamper['seal_status'] == 'broken'])
+            st.metric("Broken Seals", broken_seal_count)
         
-        # Tampering Detection Charts
+        # Tampering detection charts
         col1, col2 = st.columns(2)
         
         with col1:
-            # Tilt Angle Scatter Plot
             fig_tilt = px.scatter(
-                filtered_tampering,
+                filtered_tamper,
                 x='timestamp',
                 y='tilt_angle',
                 color='package_id',
-                title='Package Tilt Angles Over Time',
+                title='Package Tilt Angle Detection',
                 labels={'tilt_angle': 'Tilt Angle (degrees)'}
             )
-            fig_tilt.add_hline(y=45, line_dash="dash", line_color="red", annotation_text="Tilt Alert Threshold (45°)")
+            fig_tilt.add_hline(y=45, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
             st.plotly_chart(fig_tilt, use_container_width=True)
         
         with col2:
-            # Light Exposure Chart
             fig_light = px.scatter(
-                filtered_tampering,
+                filtered_tamper,
                 x='timestamp',
-                y='light_exposure', 
+                y='light_exposure_lux',
                 color='package_id',
-                title='Light Exposure Monitoring',
-                labels={'light_exposure': 'Light Exposure (lux)'}
+                title='Light Exposure Detection',
+                labels={'light_exposure_lux': 'Light Exposure (lux)'}
             )
-            fig_light.add_hline(y=1000, line_dash="dash", line_color="red", annotation_text="Light Alert Threshold (1000 lux)")
+            fig_light.add_hline(y=1000, line_dash="dash", line_color="red", annotation_text="Alert Threshold")
             st.plotly_chart(fig_light, use_container_width=True)
         
-        # Seal Status Summary
-        st.markdown("### 🔒 Seal Status Summary")
-        seal_summary = latest_tampering['seal_status'].value_counts()
-        
+        # Seal status analysis
         col1, col2 = st.columns(2)
+        
         with col1:
+            # Seal status distribution
+            seal_counts = latest_tamper['seal_status'].value_counts()
             fig_seal = px.pie(
-                values=seal_summary.values,
-                names=seal_summary.index,
-                title='Current Seal Status Distribution'
+                values=seal_counts.values,
+                names=seal_counts.index,
+                title='Package Seal Status Distribution',
+                color_discrete_map={'intact': 'green', 'broken': 'red'}
             )
             st.plotly_chart(fig_seal, use_container_width=True)
         
         with col2:
-            # Recent seal breaks
-            recent_breaks = filtered_tampering[
-                (filtered_tampering['seal_status'] == 'broken') & 
-                (filtered_tampering['timestamp'] >= filtered_tampering['timestamp'].max() - timedelta(days=1))
-            ].sort_values('timestamp', ascending=False)
+            # Security risk assessment
+            latest_tamper['risk_score'] = (
+                (latest_tamper['tilt_angle'] > 45).astype(int) * 30 +
+                (latest_tamper['light_exposure_lux'] > 1000).astype(int) * 40 +
+                (latest_tamper['seal_status'] == 'broken').astype(int) * 50
+            )
             
-            st.markdown("**Recent Seal Breaks (Last 24h):**")
-            if not recent_breaks.empty:
-                st.dataframe(
-                    recent_breaks[['timestamp', 'package_id', 'tilt_angle', 'light_exposure']].head(10),
-                    use_container_width=True
-                )
-            else:
-                st.success("No seal breaks in the last 24 hours")
-        
-        # Suspected Tampering Events Table
-        st.markdown("### 🕵️ Suspected Tampering Events")
-        
-        suspected_tampering = latest_tampering[
-            (latest_tampering['tilt_angle'] > 45) |
-            (latest_tampering['light_exposure'] > 1000) |
-            (latest_tampering['seal_status'] == 'broken')
-        ].sort_values('tilt_angle', ascending=False)
-        
-        if not suspected_tampering.empty:
-            tampering_display = suspected_tampering[['package_id', 'tilt_angle', 'light_exposure', 'seal_status']].copy()
-            tampering_display.columns = ['Package ID', 'Tilt Angle (°)', 'Light Exposure (lux)', 'Seal Status']
+            risk_distribution = pd.cut(latest_tamper['risk_score'], 
+                                     bins=[0, 20, 50, 100], 
+                                     labels=['Low', 'Medium', 'High']).value_counts()
             
-            # Color code the dataframe
+            fig_risk = px.bar(
+                x=risk_distribution.index,
+                y=risk_distribution.values,
+                title='Package Security Risk Distribution',
+                labels={'x': 'Risk Level', 'y': 'Number of Packages'},
+                color=risk_distribution.index,
+                color_discrete_map={'Low': 'green', 'Medium': 'orange', 'High': 'red'}
+            )
+            st.plotly_chart(fig_risk, use_container_width=True)
+        
+        # Suspected tampering events
+        st.subheader("Suspected Tampering Events")
+        suspected_packages = latest_tamper[
+            (latest_tamper['tilt_angle'] > 45) |
+            (latest_tamper['light_exposure_lux'] > 1000) |
+            (latest_tamper['seal_status'] == 'broken')
+        ]
+        
+        if not suspected_packages.empty:
+            tamper_table = suspected_packages[['package_id', 'tilt_angle', 'light_exposure_lux', 'seal_status']].copy()
+            tamper_table.columns = ['Package ID', 'Tilt Angle (°)', 'Light Exposure (lux)', 'Seal Status']
+            
             def highlight_tampering(row):
                 colors = []
                 for col in row.index:
@@ -1677,12 +1860,9 @@ def main():
                         colors.append('')
                 return colors
             
-            st.dataframe(
-                tampering_display.style.apply(highlight_tampering, axis=1),
-                use_container_width=True
-            )
+            st.dataframe(tamper_table.style.apply(highlight_tampering, axis=1), use_container_width=True)
         else:
-            st.success("✅ No suspected tampering events detected")
+            st.success("✅ No suspicious tampering activity detected")
 
 if __name__ == "__main__":
     main()
